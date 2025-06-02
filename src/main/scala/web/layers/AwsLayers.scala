@@ -1,4 +1,4 @@
-package layers
+package web.layers
 
 import zio.aws.netty.NettyHttpClient._
 import zio._
@@ -11,5 +11,6 @@ object AwsLayers {
   val httpClientLayer: ZLayer[Any, Throwable, HttpClient] = NettyHttpClient.default
 
   val awsConfigLayer: ZLayer[Any, Throwable, AwsConfig] = httpClientLayer >>> AwsConfig.default
+  
 
 }
