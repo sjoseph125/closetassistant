@@ -1,5 +1,0 @@
-package business
-
-class UpdateUserCloset {
-  
-}

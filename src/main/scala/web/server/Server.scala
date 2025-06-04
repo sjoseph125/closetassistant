@@ -5,9 +5,8 @@ import zio.http.*
 import zio.json.*
 
 import zio.ZIOAppDefault
-import business.GetUserCloset
 import web.layers.ServiceLayers
-import zio.aws.dynamodb.DynamoDb
+import web.layers.AwsLayers
 
 object HttpServer extends ZIOAppDefault {
 
@@ -31,8 +30,9 @@ object HttpServer extends ZIOAppDefault {
           // ZIO HTTP Server Layers
           ZLayer.succeed(serverConfig),
           Server.live,
-          ServiceLayers.executor ++ 
-          ServiceLayers.s3Layer
+          AwsLayers.awsConfigLayer,
+          ServiceLayers.executor,
+          ServiceLayers.s3Layer   // Add this layer for AwsConfig
         )
         .catchAllDefect(defect =>
           logErrorCause(

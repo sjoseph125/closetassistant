@@ -1,35 +1,22 @@
 package business
 
-import zio._
-import zio.aws.dynamodb.DynamoDb
-import zio.aws.dynamodb.model._
-import zio.prelude.data.Optional
-import zio.aws.dynamodb.model.primitives._
-import zio.dynamodb.ToAttributeValue
-
-import zio.aws.core.AwsError
-import zio.json.JsonEncoder
-import scala.util.chaining.*
-import core.UserCloset
+import zio.*
+import zio.dynamodb.*
+import zio.dynamodb.DynamoDBExecutor
+import zio.dynamodb.DynamoDBError
+import zio.dynamodb.DynamoDBQuery
 import zio.dynamodb.KeyConditionExpr
 import zio.dynamodb.KeyConditionExpr.PrimaryKeyExpr
 import persistence.models.*
-import zio.dynamodb.DynamoDBExecutor
-import zio.dynamodb.DynamoDBError
-import business.GetUserCloset.*
-import zio.dynamodb.DynamoDBQuery
-import persistence.models.User
-import persistence.queries.DynamoDBQueries.get
-import zio.stream.ZStream
+import business.GetUserClosetSvcFlow.*
+import core.UserCloset
 import zio.dynamodb.DynamoDBError.ItemError
 
-class GetUserCloset(cfgCtx: CfgCtx)
+class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
     extends (String => URIO[DynamoDBExecutor, Option[UserCloset]]) {
   import cfgCtx._
-  override def apply(
-      userId: String
-  ): URIO[DynamoDBExecutor, Option[UserCloset]] = {
-    ZIO.logInfo("Starting GetUserCloset flow")
+  override def apply(userId: String): URIO[DynamoDBExecutor, Option[UserCloset]] = {
+    ZIO.logInfo("Starting GetUserClosetSvcFlow")
 
     getClosetData(
       UserClosetModel.userId.partitionKey === userId
@@ -63,12 +50,11 @@ class GetUserCloset(cfgCtx: CfgCtx)
     )
   }
 
-  private def getClosetItems(closetItemKeys: List[String]): ZIO[DynamoDBExecutor, DynamoDBError, List[ClosetItem]] =
-   
-    val closetItemsBatch: ZIO[DynamoDBExecutor, DynamoDBError, List[Either[ItemError, ClosetItem]]] =
+  private def getClosetItems(closetItemKeys: List[String]): ZIO[DynamoDBExecutor, DynamoDBError, List[ClosetItemModel]] =
+    val closetItemsBatch: ZIO[DynamoDBExecutor, DynamoDBError, List[Either[ItemError, ClosetItemModel]]] =
       DynamoDBQuery.forEach(closetItemKeys) { key =>
       ZIO.logInfo(s"Processing closet item key: $key")
-      getClosetItem(ClosetItem.closetItemKey.partitionKey === key)
+      getClosetItem(ClosetItemModel.closetItemKey.partitionKey === key)
       }.execute
     for {
       items <- closetItemsBatch
@@ -83,9 +69,9 @@ class GetUserCloset(cfgCtx: CfgCtx)
     }
   }
 
-object GetUserCloset {
+object GetUserClosetSvcFlow {
   case class CfgCtx(
       getClosetData: KeyConditionExpr[UserClosetModel] => ZIO[DynamoDBExecutor, Throwable, Chunk[UserClosetModel]],
-      getClosetItem: KeyConditionExpr.PrimaryKeyExpr[ClosetItem] => DynamoDBQuery[ClosetItem, Either[ItemError, ClosetItem]]
+      getClosetItem: KeyConditionExpr.PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[ClosetItemModel, Either[ItemError, ClosetItemModel]]
   )
 }
