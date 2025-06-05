@@ -8,9 +8,7 @@ import zio.aws.core.httpclient.HttpClient
 import zio.aws.core.config.AwsConfig
 
 object AwsLayers {
-  val httpClientLayer: ZLayer[Any, Throwable, HttpClient] = NettyHttpClient.default
-
-  val awsConfigLayer: ZLayer[Any, Throwable, AwsConfig] = httpClientLayer >>> AwsConfig.default
-  
+ 
+  val awsConfigLayer: ZLayer[Any, Throwable, AwsConfig] = NettyHttpClient.default >>> AwsConfig.default
 
 }

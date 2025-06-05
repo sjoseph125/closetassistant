@@ -48,4 +48,11 @@ object DynamoDBQueries {
       action: Action[From]
   ): DynamoDBQuery[From, Option[From]] =
     DynamoDBQuery.update(tableName)(key)(action)
+
+    
+  def put[From: Schema](
+      tableName: String,
+      item: From
+  ): DynamoDBQuery[From, Option[From]] =
+    DynamoDBQuery.put(tableName, item)
 }

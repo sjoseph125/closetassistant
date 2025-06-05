@@ -32,7 +32,7 @@ object HttpServer extends ZIOAppDefault {
           Server.live,
           AwsLayers.awsConfigLayer,
           ServiceLayers.executor,
-          ServiceLayers.s3Layer   // Add this layer for AwsConfig
+          ServiceLayers.s3Layer
         )
         .catchAllDefect(defect =>
           logErrorCause(

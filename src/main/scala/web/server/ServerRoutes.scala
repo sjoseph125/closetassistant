@@ -30,7 +30,7 @@ object ServerRoutes extends Flows {
             status = Status.InternalServerError,
             body = Body.fromString(s"Error generating presigned URL: ${error.getMessage}")
           )),
-          url => ZIO.succeed(Response.text(url.toString))
+          res => ZIO.succeed(Response.json(res.toJson))
         )
         //ZIO.succeed(Response.text(s"Upload closet for user: $userId"))
     },
@@ -38,7 +38,7 @@ object ServerRoutes extends Flows {
       (request: Request) => request.body.asString.flatMap { jsonString =>
         jsonString.fromJson[UpdateUserCloset] match {
           case Right(newItem) => updateUserCloset(newItem)
-              .map( _ => Response.status(Status.NoContent))
+              .map( res => Response.json(res.toJson))
           case Left(error) =>
             ZIO.succeed(Response(
               status = Status.BadRequest,

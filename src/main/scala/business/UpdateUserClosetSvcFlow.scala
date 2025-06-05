@@ -14,25 +14,98 @@ import persistence.models.*
 import core.UserCloset
 import zio.dynamodb.DynamoDBError.ItemError
 import zio.dynamodb.UpdateExpression.Action
+import persistence.models.ClosetItemModel.closetItemKey
 
-class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx) extends (UpdateUserCloset => URIO[DynamoDBExecutor, Option[UserCloset]]) {
+class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
+    extends (UpdateUserCloset => RIO[DynamoDBExecutor, Option[UserCloset]]) {
   import cfgCtx._
 
-  override def apply(updateUserCloset: UpdateUserCloset): URIO[DynamoDBExecutor, Option[UserCloset]] = {
-    ZIO.logInfo(s"Starting UpdateUserCloset flow for user ${updateUserCloset.userId}")
-
-    // Here you would implement the logic to update the user's closet
-    // For example, you might fetch the existing closet, modify it, and save it back
-
-    ZIO.logInfo(s"Updated closet for user ${updateUserCloset.userId} with items: ${updateUserCloset.closetItems.mkString(", ")}")
-    ZIO.succeed(None)
+  override def apply(
+      updateUserCloset: UpdateUserCloset
+  ): RIO[DynamoDBExecutor, Option[UserCloset]] = {
+    import updateUserCloset.*
+    ZIO.logInfo(
+      s"Starting UpdateUserCloset flow for user ${updateUserCloset.userId}"
+    )
+    getClosetData(
+      UserClosetModel.userId.partitionKey === userId
+    ).foldZIO(
+      err =>
+        ZIO.logError(
+          s"Error fetching closet data for user $userId: ${err.getMessage}"
+        ) *> ZIO.fail(new Exception("Failed to fetch closet data")),
+      result => {
+        result.headOption match {
+          case None =>
+            ZIO.logInfo(s"No closet found for user $userId") *> ZIO.fail(
+              new Exception("No closet found")
+            )
+          case Some(result) =>
+            ZIO.logInfo(
+              s"Found closet for user $userId with ${result.closetItemKeys.size} items"
+            )
+            addNewClosetItem(closetItemKeys)
+              .foldZIO(
+                err =>
+                  ZIO.logError(
+                    s"Error adding closet items: ${err.getMessage}"
+                  ) *>
+                    ZIO.fail(new Exception("Failed to add closet items")),
+                res =>
+                  ZIO.logInfo(
+                    s"Updated closet for user $userId with items: ${closetItemKeys.mkString(", ")}"
+                  )
+                  updateClosetDataWithNewItems(
+                    userId,
+                    closetItemKeys,
+                    result.closetItemKeys
+                  )
+              )
+        }
+      }
+    )
   }
-  
+
+  private def addNewClosetItem(closetItemKeys: List[String]) =
+    DynamoDBQuery
+      .forEach(closetItemKeys) { key =>
+        addClosetItem(
+          ClosetItemModel(
+            closetItemKey = key,
+            itemType = "some type"
+          )
+        )
+      }
+      .execute
+
+  private def updateClosetDataWithNewItems(
+    userId: String,
+    closetItemKeys: List[String],
+    existingClosetItemKeys: List[String]) =
+
+    updateClosetData(
+      UserClosetModel.userId.partitionKey === userId,
+      UserClosetModel.closetItemKeys.set(
+        existingClosetItemKeys ++: closetItemKeys
+      )
+    ).execute
+      .flatMap(_ => getUserCloset(userId))
 }
 
 object UpdateUserClosetSvcFlow {
-    case class CfgCtx(
-      getClosetData: KeyConditionExpr[UserClosetModel] => ZIO[DynamoDBExecutor, Throwable, Chunk[UserClosetModel]],
-      addClosetItem: (String, PrimaryKeyExpr[ClosetItemModel], Action[ClosetItemModel]) => DynamoDBQuery[ClosetItemModel, Option[ClosetItemModel]],
-    )
+  case class CfgCtx(
+      getClosetData: KeyConditionExpr[UserClosetModel] => ZIO[
+        DynamoDBExecutor,
+        Throwable,
+        Chunk[UserClosetModel]
+      ],
+      addClosetItem: ClosetItemModel => DynamoDBQuery[ClosetItemModel, Option[
+        ClosetItemModel
+      ]],
+      updateClosetData: (
+          PrimaryKeyExpr[UserClosetModel],
+          Action[UserClosetModel]
+      ) => DynamoDBQuery[UserClosetModel, Option[UserClosetModel]],
+      getUserCloset: String => URIO[DynamoDBExecutor, Option[UserCloset]]
+  )
 }

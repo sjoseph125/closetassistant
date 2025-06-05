@@ -26,12 +26,15 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
           s"Error fetching closet data for user $userId: ${err.getMessage}"
         ) *> ZIO.succeed(None),
       result => {
-        if (result.isEmpty) {
-          ZIO.logInfo(s"Found no closet for user $userId") *> ZIO.succeed(None)
-        } else {
+        result.headOption match {
+
+        case None =>
+          ZIO.logInfo(s"No closet found for user $userId") *> ZIO.succeed(None)
+          
+        case Some(_) =>
           ZIO.logInfo(
-            s"Fetched closet for user $userId: ${result.size} with items ${result.map(_.closetItemKeys).mkString(", ")}"
-          ) *>
+            s"Found closet for user $userId with items: ${result.flatMap(_.closetItemKeys).mkString(", ")}"
+          )
           getClosetItems(result.flatMap(_.closetItemKeys).toList)
             .foldZIO(
               err => ZIO.logError(s"Error fetching closet items: ${err.getMessage}") *> ZIO.succeed(None),
