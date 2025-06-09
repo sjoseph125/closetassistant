@@ -6,17 +6,17 @@ import persistence.models.UserClosetModel
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.presigner.{S3Presigner, model}
 import zio.*
-import zio.Chunk
 import zio.dynamodb.{DynamoDBExecutor, KeyConditionExpr}
 import java.util.UUID
 import scala.util.chaining.*
+import web.layers.ServiceLayers.ExecutorAndPresignerType
 
 class GetPresignedURLSvcFlow(cfgCtx: CfgCtx)
-    extends (String => ZIO[S3Presigner & DynamoDBExecutor, Exception, GetPresignedURL]) {
+    extends (String => RIO[ExecutorAndPresignerType, GetPresignedURL]) {
   import cfgCtx._
   override def apply(
       userId: String
-  ): ZIO[S3Presigner & DynamoDBExecutor, Exception, GetPresignedURL] = {
+  ): ZIO[ExecutorAndPresignerType, Exception, GetPresignedURL] = {
     ZIO.logInfo(s"Starting GetPresignedURL flow for user $userId")
     getClosetData(
       UserClosetModel.userId.partitionKey === userId
@@ -37,6 +37,9 @@ class GetPresignedURLSvcFlow(cfgCtx: CfgCtx)
             )
             ZIO.serviceWith[S3Presigner](presigner =>
               constructPresignedUrl(presigner, userId, result)
+              .tap(
+                url => ZIO.logInfo(s"Generated presigned URL for item: ${url.imageIdentifier}")
+              )
             )
         }
       }
@@ -81,6 +84,4 @@ object GetPresignedURLSvcFlow {
       ],
       bucketName: String
   )
-
-  // Define any additional methods or types needed for the service flow
 }

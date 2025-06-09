@@ -13,47 +13,68 @@ import scala.util.chaining.*
 import zio.dynamodb.DynamoDBExecutor
 import core.UpdateUserCloset
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import utils.Extensions.*
 
 object ServerRoutes extends Flows {
   val routes: Routes[S3Presigner & DynamoDBExecutor, Nothing] = Routes(
     Method.GET / Root -> handler(Response.text(s"Hello")),
     Method.GET / "v1" / "closet" / string("userId") -> handler {
-      (userId: String, _: Request) =>
-        getUserCloset(userId)
-          .map { closet => Response.json(closet.toJson) }
+      (userId: String, _: Request) => getUserCloset(userId).toHttpResponse
     },
-    Method.GET / "v1" / "upload" / string("userId") -> handler{
-      (userId: String, _: Request) =>
-        getPresignedUrl(userId)
+    Method.GET / "v1" / "upload" / string("userId") -> handler {
+      (userId: String, _: Request) => getPresignedUrl(userId).toHttpResponse
+    },
+    Method.PUT / "v1" / "closet" -> handler { (request: Request) =>
+      request.body.asString
         .foldZIO(
-          error => ZIO.succeed(Response(
-            status = Status.InternalServerError,
-            body = Body.fromString(s"Error generating presigned URL: ${error.getMessage}")
-          )),
-          res => ZIO.succeed(Response.json(res.toJson))
+          cause =>
+            Response(
+              status = Status.InternalServerError,
+              body = Body.fromString(
+                s"Error reading request body: ${cause.getMessage()}"
+              )
+            ).pipe(ZIO.succeed),
+          body =>
+            body.fromJson[UpdateUserCloset] match {
+              case Right(newItems) => updateUserCloset(newItems).toHttpResponse
+              case Left(error) =>
+                Response(
+                  status = Status.BadRequest,
+                  body = Body.fromString(s"Invalid JSON: ${error}")
+                ).pipe(ZIO.succeed)
+            }
         )
-        //ZIO.succeed(Response.text(s"Upload closet for user: $userId"))
-    },
-    Method.PUT / "v1" / "closet" -> handler {
-      (request: Request) => request.body.asString.flatMap { jsonString =>
-        jsonString.fromJson[UpdateUserCloset] match {
-          case Right(newItem) => updateUserCloset(newItem)
-              .map( res => Response.json(res.toJson))
-          case Left(error) =>
-            ZIO.succeed(Response(
-              status = Status.BadRequest,
-              body = Body.fromString(s"Invalid JSON: ${error}")
-            ))
-        }
 
-      }.foldCause(
-        cause => Response(
-          status = Status.InternalServerError,
-          body = Body.fromString(s"Error processing request: ${cause.prettyPrint}")
-        ),
-        response => response
-      )
-        
+    },
+    Method.DELETE / "v1" / "closet" -> handler { (request: Request) =>
+      request.body.asString
+        .foldZIO(
+          cause =>
+            Response(
+              status = Status.InternalServerError,
+              body = Body.fromString(
+                s"Error reading request body: ${cause.getMessage()}"
+              )
+            ).pipe(ZIO.succeed),
+          body =>
+            body.fromJson[UpdateUserCloset] match {
+              case Right(deleteItems) =>
+                updateUserCloset(
+                  deleteItems.copy(deleteItems = true)
+                ).toHttpResponse
+              case Left(error) =>
+                Response(
+                  status = Status.BadRequest,
+                  body = Body.fromString(s"Invalid JSON: ${error}")
+                ).pipe(ZIO.succeed)
+            }
+        )
     }
+    // ,
+    // Method.POST / "v1" / "recommend-outfit" -> handler {
+    //   (userId: String, closetItemKey: String, _: Request) =>
+    //     ZIO.logInfo(s"Delete request for user $userId") *>
+    //       ZIO.succeed(Response.text(s"Delete request for user $userId"))
+    // }
   )
 }

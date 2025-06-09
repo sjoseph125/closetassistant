@@ -5,6 +5,7 @@ import zio.dynamodb.{DynamoDBQuery, KeyConditionExpr, DynamoDBExecutor}
 import zio.dynamodb.KeyConditionExpr.PrimaryKeyExpr
 import zio.dynamodb.DynamoDBError.ItemError
 import zio.dynamodb.UpdateExpression.Action
+import zio.dynamodb.DynamoDBError
 
 object DynamoDBQueries {
   def get[From: Schema](tableName: String)(
@@ -46,13 +47,19 @@ object DynamoDBQueries {
       tableName: String,
       key: PrimaryKeyExpr[From],
       action: Action[From]
-  ): DynamoDBQuery[From, Option[From]] =
-    DynamoDBQuery.update(tableName)(key)(action)
+  ): ZIO[DynamoDBExecutor, DynamoDBError, Option[From]] =
+    DynamoDBQuery.update(tableName)(key)(action).execute
 
-    
   def put[From: Schema](
       tableName: String,
       item: From
   ): DynamoDBQuery[From, Option[From]] =
     DynamoDBQuery.put(tableName, item)
+
+    
+  def deleteItem[From: Schema](
+      tableName: String,
+      key: PrimaryKeyExpr[From]
+  ): DynamoDBQuery[From, Option[From]] =
+    DynamoDBQuery.deleteFrom(tableName)(key)
 }

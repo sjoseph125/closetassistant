@@ -16,4 +16,8 @@ object ServiceLayers {
     lazy val executor = dynamoDbLayer >>> DynamoDBExecutor.live
 
     lazy val s3Layer: ZLayer[AwsConfig, Throwable, S3Presigner] = awsConfigLayer >>> ZLayer.succeed(S3Presigner.builder().build())
+
+    lazy val ExecutorAndPresigner = executor ++ s3Layer
+
+    type ExecutorAndPresignerType = S3Presigner & DynamoDBExecutor
 }

@@ -1,20 +1,15 @@
 package business
 
 import business.UpdateUserClosetSvcFlow._
-import core.UpdateUserCloset
+import core.{UpdateUserCloset, UserCloset}
+import persistence.models.*
+import persistence.models.ClosetItemModel.closetItemKey
+import scala.util.chaining.scalaUtilChainingOps
 import zio.*
 import zio.dynamodb.*
 import zio.dynamodb.DynamoDBExecutor
-import zio.dynamodb.DynamoDBError
-import zio.dynamodb.DynamoDBQuery
-import zio.dynamodb.KeyConditionExpr
-import zio.dynamodb.KeyConditionExpr.PrimaryKeyExpr
-import persistence.models.*
-
-import core.UserCloset
-import zio.dynamodb.DynamoDBError.ItemError
 import zio.dynamodb.UpdateExpression.Action
-import persistence.models.ClosetItemModel.closetItemKey
+import zio.dynamodb.KeyConditionExpr.PrimaryKeyExpr
 
 class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
     extends (UpdateUserCloset => RIO[DynamoDBExecutor, Option[UserCloset]]) {
@@ -44,25 +39,45 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
             ZIO.logInfo(
               s"Found closet for user $userId with ${result.closetItemKeys.size} items"
             )
-            addNewClosetItem(closetItemKeys)
-              .foldZIO(
-                err =>
-                  ZIO.logError(
-                    s"Error adding closet items: ${err.getMessage}"
-                  ) *>
-                    ZIO.fail(new Exception("Failed to add closet items")),
-                res =>
-                  ZIO.logInfo(
-                    s"Updated closet for user $userId with items: ${closetItemKeys.mkString(", ")}"
-                  )
-                  updateClosetDataWithNewItems(
-                    userId,
-                    closetItemKeys,
-                    result.closetItemKeys
-                  )
-              )
+            detemineAddorDelete(
+              updateUserCloset,
+              result.closetItemKeys,
+              closetItemKeys
+            )
         }
       }
+    )
+  }
+
+  private def detemineAddorDelete(
+      updateUserCloset: UpdateUserCloset,
+      existingClosetItemKeys: List[String],
+      closetItemKeys: List[String]
+  ): RIO[DynamoDBExecutor, Option[UserCloset]] = {
+    {
+      if (updateUserCloset.deleteItems) deleteClosetItems(closetItemKeys)
+      else addNewClosetItem(closetItemKeys)
+
+    }.foldZIO(
+      err =>
+        ZIO.logError(
+          s"Error updating closet items: ${err.getMessage}"
+        ) *>
+          ZIO.fail(new Exception("Failed to add closet items")),
+      res =>
+        ZIO.logInfo(
+          s"Updated closet itmes for user ${updateUserCloset.userId} with items: ${closetItemKeys
+              .mkString(", ")} " +
+            s"and action: ${
+                if (updateUserCloset.deleteItems) "delete" else "add"
+              }"
+        )
+        updateClosetDataWithItems(
+          updateUserCloset.userId,
+          closetItemKeys,
+          existingClosetItemKeys,
+          deleteItems = updateUserCloset.deleteItems
+        )
     )
   }
 
@@ -78,18 +93,44 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
       }
       .execute
 
-  private def updateClosetDataWithNewItems(
-    userId: String,
-    closetItemKeys: List[String],
-    existingClosetItemKeys: List[String]) =
+  private def deleteClosetItems(
+      closetItemKeys: List[String]
+  ): ZIO[DynamoDBExecutor, DynamoDBError, List[ClosetItemModel]] =
+    ZIO.logInfo(s"Deleting closet items: ${closetItemKeys.mkString(", ")}")
 
-    updateClosetData(
-      UserClosetModel.userId.partitionKey === userId,
-      UserClosetModel.closetItemKeys.set(
+    DynamoDBQuery
+      .forEach(closetItemKeys) { key =>
+        deleteClosetItem(ClosetItemModel.closetItemKey.partitionKey === key)
+      }
+      .execute
+      .map(_.flatten)
+
+  private def updateClosetDataWithItems(
+      userId: String,
+      closetItemKeys: List[String],
+      existingClosetItemKeys: List[String],
+      deleteItems: Boolean
+  ): ZIO[DynamoDBExecutor, DynamoDBError, Option[UserCloset]] =
+
+    ZIO.logInfo(
+      s"Updating closet items: ${closetItemKeys.mkString(", ")}, deleteItems: $deleteItems"
+    )
+
+    {
+      if (deleteItems) {
+        existingClosetItemKeys diff closetItemKeys
+      } else {
         existingClosetItemKeys ++: closetItemKeys
-      )
-    ).execute
-      .flatMap(_ => getUserCloset(userId))
+      }
+    }.pipe(updatedItemKeys =>
+      updateClosetData(
+        UserClosetModel.userId.partitionKey === userId,
+        UserClosetModel.closetItemKeys.set(
+          updatedItemKeys.distinct
+        )
+      ).flatMap(_ => getUserCloset(userId))
+    )
+
 }
 
 object UpdateUserClosetSvcFlow {
@@ -105,7 +146,11 @@ object UpdateUserClosetSvcFlow {
       updateClosetData: (
           PrimaryKeyExpr[UserClosetModel],
           Action[UserClosetModel]
-      ) => DynamoDBQuery[UserClosetModel, Option[UserClosetModel]],
-      getUserCloset: String => URIO[DynamoDBExecutor, Option[UserCloset]]
+      ) => ZIO[DynamoDBExecutor, DynamoDBError, Option[UserClosetModel]],
+      getUserCloset: String => URIO[DynamoDBExecutor, Option[UserCloset]],
+      deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[
+        ClosetItemModel,
+        Option[ClosetItemModel]
+      ]
   )
 }

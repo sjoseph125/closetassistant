@@ -31,8 +31,7 @@ object HttpServer extends ZIOAppDefault {
           ZLayer.succeed(serverConfig),
           Server.live,
           AwsLayers.awsConfigLayer,
-          ServiceLayers.executor,
-          ServiceLayers.s3Layer
+          ServiceLayers.ExecutorAndPresigner
         )
         .catchAllDefect(defect =>
           logErrorCause(
