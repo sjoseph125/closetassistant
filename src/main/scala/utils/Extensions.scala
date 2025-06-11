@@ -1,13 +1,15 @@
 package utils
 
 import zio.http.{Body, Response, Status}
-import zio.ZIO
+import zio.*
 import core.BaseRequest
 import zio.json.*
 import scala.util.chaining.*
 import utils.Extensions.toJsonResponse
 import scala.util.Success
 import scala.util.Failure
+import zio.dynamodb.DynamoDBExecutor
+import utils.Extensions.toHttpResponse
 
 object Extensions {
 //   extension (body: Body)
@@ -50,4 +52,5 @@ object Extensions {
           ),
         a => a.toJsonResponse
       )
+     
 }

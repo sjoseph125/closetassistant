@@ -7,6 +7,7 @@ import zio.json.*
 import zio.ZIOAppDefault
 import web.layers.ServiceLayers
 import web.layers.AwsLayers
+import web.layers.ServiceLayers.ExecutorAndPresignerType
 
 object HttpServer extends ZIOAppDefault {
 
@@ -31,7 +32,8 @@ object HttpServer extends ZIOAppDefault {
           ZLayer.succeed(serverConfig),
           Server.live,
           AwsLayers.awsConfigLayer,
-          ServiceLayers.ExecutorAndPresigner
+          ServiceLayers.ExecutorAndPresigner,
+          Client.default
         )
         .catchAllDefect(defect =>
           logErrorCause(

@@ -5,6 +5,7 @@ import zio.dynamodb.KeyConditionExpr.PrimaryKeyExpr
 import zio.dynamodb.UpdateExpression.Action
 import zio.dynamodb.DynamoDBError.ItemError
 import zio.dynamodb.DynamoDBExecutor
+import zio.http.*
 import persistence.models.*
 import persistence.queries.DynamoDBQueries
 import business.*
@@ -12,6 +13,8 @@ import web.server.DBFlows.*
 import web.resources.Config
 import web.layers.ServiceLayers.ExecutorAndPresignerType
 import core.*
+import web.externalservices.LLMInferneceSvcFlow
+import web.server.ExternalSvcFlows.llmPostRequest
 
 trait Flows extends Config{
 
@@ -41,6 +44,13 @@ trait Flows extends Config{
         bucketName = bucketName
       )
     )(userId)
+    
+  lazy val recommendOutfit: SearchRequest => RIO[Client, SearchResponse] = request =>
+    new RecommendOutfitSvcFlow(
+      RecommendOutfitSvcFlow.CfgCtx(
+        inferSearchRequest = llmPostRequest
+      )
+    )(request)
 }
 
 object DBFlows extends Config {
@@ -58,4 +68,13 @@ object DBFlows extends Config {
     
   lazy val deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[ClosetItemModel, Option[ClosetItemModel]] = 
     key => DynamoDBQueries.deleteItem[ClosetItemModel](closetItemTableName, key)
+}
+
+object ExternalSvcFlows extends Config {
+  lazy val llmPostRequest: SearchRequest => RIO[Client, Response] = request => 
+    new LLMInferneceSvcFlow(
+      LLMInferneceSvcFlow.CfgCtx(
+        apiUrl = llmApiUrl
+      )
+    ).postRequest(request)
 }
