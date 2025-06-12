@@ -4,7 +4,7 @@ import zio._
 import zio.http._
 import zio.http.Method.*
 import business.GetUserClosetSvcFlow
-import web.layers.ServiceLayers
+import web.layers.ServiceLayers.*
 import java.security.Provider.Service
 import zio.aws.dynamodb.DynamoDb
 import zio.json.*
@@ -18,7 +18,7 @@ import utils.Extensions.*
 import core.SearchRequest
 
 object ServerRoutes extends Flows {
-  val routes: Routes[S3Presigner & DynamoDBExecutor & Client, Nothing] =
+  val routes: Routes[ExecutorPresignerS3Type & Client, Nothing] =
     Routes(
       GET / Root -> handler(Response.text(s"Hello")),
       GET / "v1" / "closet" / string("userId") -> handler {

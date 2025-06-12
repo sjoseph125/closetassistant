@@ -11,10 +11,11 @@ import persistence.queries.DynamoDBQueries
 import business.*
 import web.server.DBFlows.*
 import web.resources.Config
-import web.layers.ServiceLayers.ExecutorAndPresignerType
+import web.layers.ServiceLayers.*
 import core.*
-import web.externalservices.LLMInferneceSvcFlow
-import web.server.ExternalSvcFlows.llmPostRequest
+import web.externalservices.*
+import web.server.ExternalSvcFlows.*
+import zio.aws.s3.S3
 
 trait Flows extends Config{
 
@@ -26,14 +27,15 @@ trait Flows extends Config{
       )
     )(userId)
 
-  lazy val updateUserCloset: UpdateUserCloset => RIO[DynamoDBExecutor, Option[UserCloset]] = updateUserCloset =>
+  lazy val updateUserCloset: UpdateUserCloset => RIO[ExecutorAndS3Type, Option[UserCloset]] = updateUserCloset =>
     new UpdateUserClosetSvcFlow(
       UpdateUserClosetSvcFlow.CfgCtx(
         getClosetData = getClosetData,
         addClosetItem = addClosetItem,
         updateClosetData = updateClosetData,
         getUserCloset = getUserCloset,
-        deleteClosetItem = deleteClosetItem
+        deleteClosetItem = deleteClosetItem,
+        s3Download = s3Download
       )
     )(updateUserCloset)
 
@@ -71,10 +73,18 @@ object DBFlows extends Config {
 }
 
 object ExternalSvcFlows extends Config {
-  lazy val llmPostRequest: SearchRequest => RIO[Client, Response] = request => 
+  lazy val llmPostRequest: PerformInference => RIO[Client & S3, Response] = request => 
     new LLMInferneceSvcFlow(
       LLMInferneceSvcFlow.CfgCtx(
-        apiUrl = llmApiUrl
+        apiUrl = llmApiUrl,
+        s3Download = s3Download
       )
     ).postRequest(request)
+
+  lazy val s3Download: String => URIO[S3, Chunk[Byte]] = imageIdentifier => 
+    new S3DownloadFlow(
+      S3DownloadFlow.CfgCtx(
+        bucketName = bucketName
+      )
+    )(imageIdentifier)
 }

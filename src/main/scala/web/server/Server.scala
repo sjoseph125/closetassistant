@@ -32,7 +32,7 @@ object HttpServer extends ZIOAppDefault {
           ZLayer.succeed(serverConfig),
           Server.live,
           AwsLayers.awsConfigLayer,
-          ServiceLayers.ExecutorAndPresigner,
+          ServiceLayers.ExecutorPresignerS3,
           Client.default
         )
         .catchAllDefect(defect =>

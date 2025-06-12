@@ -10,14 +10,16 @@ import zio.dynamodb.*
 import zio.dynamodb.DynamoDBExecutor
 import zio.dynamodb.UpdateExpression.Action
 import zio.dynamodb.KeyConditionExpr.PrimaryKeyExpr
+import zio.aws.s3.S3
+import web.layers.ServiceLayers.ExecutorAndS3Type
 
 class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
-    extends (UpdateUserCloset => RIO[DynamoDBExecutor, Option[UserCloset]]) {
+    extends (UpdateUserCloset => RIO[ExecutorAndS3Type, Option[UserCloset]]) {
   import cfgCtx._
 
   override def apply(
       updateUserCloset: UpdateUserCloset
-  ): RIO[DynamoDBExecutor, Option[UserCloset]] = {
+  ): RIO[ExecutorAndS3Type, Option[UserCloset]] = {
     import updateUserCloset.*
     ZIO.logInfo(
       s"Starting UpdateUserCloset flow for user ${updateUserCloset.userId}"
@@ -39,11 +41,15 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
             ZIO.logInfo(
               s"Found closet for user $userId with ${result.closetItemKeys.size} items"
             )
-            detemineAddorDelete(
-              updateUserCloset,
-              result.closetItemKeys,
-              closetItemKeys
+            s3Download(s"${result.imageRepoId}/${closetItemKeys.head}").flatMap(
+              chunk =>
+                detemineAddorDelete(
+                  updateUserCloset,
+                  result.closetItemKeys,
+                  closetItemKeys
+                )
             )
+
         }
       }
     )
@@ -151,6 +157,7 @@ object UpdateUserClosetSvcFlow {
       deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[
         ClosetItemModel,
         Option[ClosetItemModel]
-      ]
+      ],
+      s3Download: String => URIO[S3, Chunk[Byte]]
   )
 }

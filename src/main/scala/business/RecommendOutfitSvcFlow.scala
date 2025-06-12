@@ -14,9 +14,9 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
     // Implement the logic to send a request to the recommendation service
     // using the provided configuration context
 
-    inferSearchRequest(request)
-      .tapError(err => ZIO.logError(s"Failed to send search request: $err"))
-      .flatMap(response => {
+    // inferSearchRequest(request)
+    //   .tapError(err => ZIO.logError(s"Failed to send search request: $err"))
+    //   .flatMap(response => {
         println(response.body.asString)
         ZIO.succeed(
           SearchResponse(
@@ -25,13 +25,13 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
               List("outfit1", "outfit2", "outfit3") // Placeholder results
           )
         )
-      })
+    //   })
   }
 
 }
 
 object RecommendOutfitSvcFlow {
   case class CfgCtx(
-      inferSearchRequest: SearchRequest => RIO[Client, Response]
+    //   inferSearchRequest: SearchRequest => RIO[Client, Response]
   )
 }
