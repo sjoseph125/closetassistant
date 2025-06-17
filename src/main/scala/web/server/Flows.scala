@@ -27,7 +27,7 @@ trait Flows extends Config{
       )
     )(userId)
 
-  lazy val updateUserCloset: UpdateUserCloset => RIO[ExecutorAndS3Type, Option[UserCloset]] = updateUserCloset =>
+  lazy val updateUserCloset: UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndS3Type, Option[UserCloset]] = updateUserCloset =>
     new UpdateUserClosetSvcFlow(
       UpdateUserClosetSvcFlow.CfgCtx(
         getClosetData = getClosetData,
@@ -35,7 +35,7 @@ trait Flows extends Config{
         updateClosetData = updateClosetData,
         getUserCloset = getUserCloset,
         deleteClosetItem = deleteClosetItem,
-        s3Download = s3Download
+        llmInferenceFlow = llmPostRequest
       )
     )(updateUserCloset)
 
@@ -47,12 +47,12 @@ trait Flows extends Config{
       )
     )(userId)
     
-  lazy val recommendOutfit: SearchRequest => RIO[Client, SearchResponse] = request =>
-    new RecommendOutfitSvcFlow(
-      RecommendOutfitSvcFlow.CfgCtx(
-        inferSearchRequest = llmPostRequest
-      )
-    )(request)
+  // lazy val recommendOutfit: SearchRequest => RIO[Client, SearchResponse] = request =>
+  //   new RecommendOutfitSvcFlow(
+  //     RecommendOutfitSvcFlow.CfgCtx(
+  //       inferSearchRequest = llmPostRequest
+  //     )
+  //   )(request)
 }
 
 object DBFlows extends Config {
@@ -73,11 +73,13 @@ object DBFlows extends Config {
 }
 
 object ExternalSvcFlows extends Config {
-  lazy val llmPostRequest: PerformInference => RIO[Client & S3, Response] = request => 
-    new LLMInferneceSvcFlow(
-      LLMInferneceSvcFlow.CfgCtx(
+  lazy val llmPostRequest: PerformInference => RIO[ClientAndS3, List[Response]] = request => 
+    new LLMInferneceFlow(
+      LLMInferneceFlow.CfgCtx(
         apiUrl = llmApiUrl,
-        s3Download = s3Download
+        s3Download = s3Download,
+        model = model,
+        prompt = prompt
       )
     ).postRequest(request)
 

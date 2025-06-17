@@ -73,28 +73,29 @@ object ServerRoutes extends Flows {
                   ).pipe(ZIO.succeed)
               }
           )
-      },
-      Method.POST / "v1" / "recommend-outfit" -> handler { (request: Request) =>
-        request.body.asString
-          .foldZIO(
-            cause =>
-              Response(
-                status = Status.InternalServerError,
-                body = Body.fromString(
-                  s"Error reading request body: ${cause.getMessage()}"
-                )
-              ).pipe(ZIO.succeed),
-            body =>
-              body.fromJson[SearchRequest] match {
-                case Right(searchOutfitReq) =>
-                  recommendOutfit(searchOutfitReq).toHttpResponse
-                case Left(error) =>
-                  Response(
-                    status = Status.BadRequest,
-                    body = Body.fromString(s"Invalid JSON: ${error}")
-                  ).pipe(ZIO.succeed)
-              }
-          )
       }
+      // ,
+      // Method.POST / "v1" / "recommend-outfit" -> handler { (request: Request) =>
+      //   request.body.asString
+      //     .foldZIO(
+      //       cause =>
+      //         Response(
+      //           status = Status.InternalServerError,
+      //           body = Body.fromString(
+      //             s"Error reading request body: ${cause.getMessage()}"
+      //           )
+      //         ).pipe(ZIO.succeed),
+      //       body =>
+      //         body.fromJson[SearchRequest] match {
+      //           case Right(searchOutfitReq) =>
+      //             recommendOutfit(searchOutfitReq).toHttpResponse
+      //           case Left(error) =>
+      //             Response(
+      //               status = Status.BadRequest,
+      //               body = Body.fromString(s"Invalid JSON: ${error}")
+      //             ).pipe(ZIO.succeed)
+      //         }
+      //     )
+      // }
     )
 }

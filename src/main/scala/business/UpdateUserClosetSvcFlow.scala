@@ -1,7 +1,7 @@
 package business
 
 import business.UpdateUserClosetSvcFlow._
-import core.{UpdateUserCloset, UserCloset}
+import core.{UpdateUserCloset, UserCloset, PerformInference}
 import persistence.models.*
 import persistence.models.ClosetItemModel.closetItemKey
 import scala.util.chaining.scalaUtilChainingOps
@@ -11,15 +11,21 @@ import zio.dynamodb.DynamoDBExecutor
 import zio.dynamodb.UpdateExpression.Action
 import zio.dynamodb.KeyConditionExpr.PrimaryKeyExpr
 import zio.aws.s3.S3
-import web.layers.ServiceLayers.ExecutorAndS3Type
+import web.layers.ServiceLayers.*
+import zio.http.{Response, Client}
+import persistence.queries.DynamoDBQueries.update
 
 class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
-    extends (UpdateUserCloset => RIO[ExecutorAndS3Type, Option[UserCloset]]) {
+    extends (
+        UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndS3Type, Option[
+          UserCloset
+        ]]
+    ) {
   import cfgCtx._
 
   override def apply(
       updateUserCloset: UpdateUserCloset
-  ): RIO[ExecutorAndS3Type, Option[UserCloset]] = {
+  ): RIO[ClientAndS3 & ExecutorAndS3Type, Option[UserCloset]] = {
     import updateUserCloset.*
     ZIO.logInfo(
       s"Starting UpdateUserCloset flow for user ${updateUserCloset.userId}"
@@ -41,13 +47,12 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
             ZIO.logInfo(
               s"Found closet for user $userId with ${result.closetItemKeys.size} items"
             )
-            s3Download(s"${result.imageRepoId}/${closetItemKeys.head}").flatMap(
-              chunk =>
-                detemineAddorDelete(
-                  updateUserCloset,
-                  result.closetItemKeys,
-                  closetItemKeys
-                )
+
+            detemineAddorDelete(
+              updateUserCloset,
+              result.closetItemKeys,
+              closetItemKeys,
+              result.imageRepoId
             )
 
         }
@@ -58,11 +63,24 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
   private def detemineAddorDelete(
       updateUserCloset: UpdateUserCloset,
       existingClosetItemKeys: List[String],
-      closetItemKeys: List[String]
-  ): RIO[DynamoDBExecutor, Option[UserCloset]] = {
+      closetItemKeys: List[String],
+      imageRepoId: String
+  ): RIO[ClientAndS3 & DynamoDBExecutor, Option[UserCloset]] = {
     {
       if (updateUserCloset.deleteItems) deleteClosetItems(closetItemKeys)
-      else addNewClosetItem(closetItemKeys)
+      else {
+        runLLMInference(imageRepoId, closetItemKeys)
+          .foldZIO(
+            cause =>
+              ZIO.logError(
+                s"Error running LLM inference for user ${updateUserCloset.userId}: ${cause.getMessage}"
+              ) *>
+                ZIO.fail(new Exception("Failed to run LLM inference")),
+            res =>
+              println(res)
+              addNewClosetItem(closetItemKeys)
+          )
+      }
 
     }.foldZIO(
       err =>
@@ -87,7 +105,18 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
     )
   }
 
+  private def runLLMInference(
+      imageRepoId: String,
+      closetItemKeys: List[String]
+  ): RIO[ClientAndS3, List[Response]] = {
+    ZIO.logInfo(
+      s"Running LLM inference for closet items: ${closetItemKeys.mkString(", ")}"
+    )
+    llmInferenceFlow(PerformInference(imageRepoId, closetItemKeys))
+  }
+
   private def addNewClosetItem(closetItemKeys: List[String]) =
+    println(closetItemKeys)
     DynamoDBQuery
       .forEach(closetItemKeys) { key =>
         addClosetItem(
@@ -141,9 +170,8 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
 
 object UpdateUserClosetSvcFlow {
   case class CfgCtx(
-      getClosetData: KeyConditionExpr[UserClosetModel] => ZIO[
+      getClosetData: KeyConditionExpr[UserClosetModel] => RIO[
         DynamoDBExecutor,
-        Throwable,
         Chunk[UserClosetModel]
       ],
       addClosetItem: ClosetItemModel => DynamoDBQuery[ClosetItemModel, Option[
@@ -158,6 +186,6 @@ object UpdateUserClosetSvcFlow {
         ClosetItemModel,
         Option[ClosetItemModel]
       ],
-      s3Download: String => URIO[S3, Chunk[Byte]]
+      llmInferenceFlow: PerformInference => RIO[Client & S3, List[Response]]
   )
 }

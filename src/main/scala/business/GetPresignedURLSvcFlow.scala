@@ -62,7 +62,7 @@ class GetPresignedURLSvcFlow(cfgCtx: CfgCtx)
           .builder()
           .putObjectRequest(putObjectRequest)
           .signatureDuration(
-            Duration.fromMillis(30000L)
+            Duration.fromMillis(300000L)
           ) // Set expiration time for the presigned URL
           .build()
       )

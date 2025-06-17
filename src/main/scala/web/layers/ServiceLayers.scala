@@ -27,4 +27,6 @@ object ServiceLayers {
     type ExecutorAndS3Type = S3 & DynamoDBExecutor
 
     type ExecutorPresignerS3Type = S3Presigner & DynamoDBExecutor & S3
+
+    type ClientAndS3 = S3 & http.Client
 }

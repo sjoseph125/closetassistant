@@ -17,7 +17,7 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
     // inferSearchRequest(request)
     //   .tapError(err => ZIO.logError(s"Failed to send search request: $err"))
     //   .flatMap(response => {
-        println(response.body.asString)
+        // println(response.body.asString)
         ZIO.succeed(
           SearchResponse(
             userId = request.userId,
