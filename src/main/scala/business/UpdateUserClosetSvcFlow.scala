@@ -1,7 +1,12 @@
 package business
 
 import business.UpdateUserClosetSvcFlow._
-import core.{UpdateUserCloset, UserCloset, PerformInference}
+import core.{
+  UpdateUserCloset,
+  UserCloset,
+  PerformInference,
+  LLMInferenceResponse
+}
 import persistence.models.*
 import persistence.models.ClosetItemModel.closetItemKey
 import scala.util.chaining.scalaUtilChainingOps
@@ -76,9 +81,9 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
                 s"Error running LLM inference for user ${updateUserCloset.userId}: ${cause.getMessage}"
               ) *>
                 ZIO.fail(new Exception("Failed to run LLM inference")),
-            res =>
-              println(res)
-              addNewClosetItem(closetItemKeys)
+            llmResponse =>
+              println(llmResponse)
+              addNewClosetItem(closetItemKeys, llmResponse)
           )
       }
 
@@ -108,21 +113,29 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
   private def runLLMInference(
       imageRepoId: String,
       closetItemKeys: List[String]
-  ): RIO[ClientAndS3, List[Response]] = {
+  ): RIO[ClientAndS3, Map[String, LLMInferenceResponse]] = {
     ZIO.logInfo(
       s"Running LLM inference for closet items: ${closetItemKeys.mkString(", ")}"
     )
     llmInferenceFlow(PerformInference(imageRepoId, closetItemKeys))
   }
 
-  private def addNewClosetItem(closetItemKeys: List[String]) =
+  private def addNewClosetItem(
+      closetItemKeys: List[String],
+      llmResponse: Map[String, LLMInferenceResponse]
+  ) =
     println(closetItemKeys)
     DynamoDBQuery
       .forEach(closetItemKeys) { key =>
         addClosetItem(
           ClosetItemModel(
             closetItemKey = key,
-            itemType = "some type"
+            itemType = "some type",
+            llmResponse
+              .get(key)
+              .getOrElse(
+                throw new Exception(s"No LLM response found for key: $key")
+              )
           )
         )
       }
@@ -186,6 +199,9 @@ object UpdateUserClosetSvcFlow {
         ClosetItemModel,
         Option[ClosetItemModel]
       ],
-      llmInferenceFlow: PerformInference => RIO[Client & S3, List[Response]]
+      llmInferenceFlow: PerformInference => RIO[
+        ClientAndS3,
+        Map[String, LLMInferenceResponse]
+      ]
   )
 }

@@ -2,29 +2,21 @@ package web.externalservices
 
 import zio.*
 import zio.http.*
-import web.externalservices.LLMInferneceFlow._
-import core.{
-  PerformInference,
-  LLMInferenceRequest,
-  LLMResponseFormat,
-  LLMResponseProperties,
-  LLMResponsePropertyType
-}
-import web.layers.ServiceLayers.ClientAndS3
-import scala.util.chaining.scalaUtilChainingOps
 import zio.aws.s3.S3
-import java.util.Base64 // Import the Base64 utility
-import zio.json.* // Import zio-json syntax for .toJson extension method
+import java.util.Base64
 
-// Ensure implicit JsonCodec for LLMInferenceRequest is in scope
-import core.LLMInferenceRequest // Ensure the type is imported
+import zio.json.*
+import web.externalservices.LLMInferneceFlow._
+import web.layers.ServiceLayers.ClientAndS3
+
+import core.{PerformInference, LLMInferenceRequest, LLMInferenceResponse, LLMInferenceResponseRaw, LLMResponse}
 
 class LLMInferneceFlow(cfgCtx: CfgCtx) {
   import cfgCtx._
 
   def postRequest(
       request: PerformInference
-  ): RIO[ClientAndS3, List[Response]] = {
+  ): RIO[ClientAndS3, Map[String, LLMInferenceResponse]] = {
     // Implement the logic to send a request to the LLM inference service
     // using the provided configuration contextZClient[Any, Scope, Body, Throwable, Response]
 
@@ -41,11 +33,11 @@ class LLMInferneceFlow(cfgCtx: CfgCtx) {
             )
             .addHeader(Header.ContentType(MediaType.application.json))
         }
-        res <- ZIO.serviceWithZIO[Client](client => client.batched(request))
-        _ = println(res.body.asString)
+        res <- ZIO.serviceWithZIO[Client](client =>
+          client.batched(request).flatMap(constructResult(imageId, _))
+        )
       } yield res
-
-    }
+    }.map(_.foldLeft(Map.empty[String, LLMInferenceResponse])(_ ++ _))
   }
 
   private def constructBody(enacodedImage: String): Body =
@@ -54,12 +46,29 @@ class LLMInferneceFlow(cfgCtx: CfgCtx) {
       LLMInferenceRequest(
         model = model,
         prompt = prompt,
-        format = LLMResponseFormat(
-          properties = LLMResponseProperties()
-        ),
         images = List(enacodedImage)
       ).toJson
     )
+  
+  private def constructResult(imageId: String, response: Response): Task[Map[String, LLMInferenceResponse]] = {
+    response.body.asString.foldZIO(
+      err => 
+        ZIO.logError(s"Failed to read response body for imageId $imageId: ${err.getMessage}") *>
+        ZIO.fail(err),
+      str => {
+        ZIO.fromEither(str.fromJson[LLMInferenceResponseRaw]).fold(
+          err => throw new Exception(s"Failed to parse response for imageId $imageId: $err"),
+          parsed => Map(imageId -> LLMInferenceResponse(
+            response = parsed.response.fromJson[LLMResponse] match {
+              case Right(llmResponse) => llmResponse
+              case Left(error) =>
+                throw new Exception(s"Failed to parse LLMResponse for imageId $imageId: $error")
+            }
+          ))
+        )
+      }
+    )
+  }
 }
 
 object LLMInferneceFlow {

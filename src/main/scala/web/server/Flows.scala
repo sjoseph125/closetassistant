@@ -73,7 +73,7 @@ object DBFlows extends Config {
 }
 
 object ExternalSvcFlows extends Config {
-  lazy val llmPostRequest: PerformInference => RIO[ClientAndS3, List[Response]] = request => 
+  lazy val llmPostRequest: PerformInference => RIO[ClientAndS3, Map[String, LLMInferenceResponse]] = request => 
     new LLMInferneceFlow(
       LLMInferneceFlow.CfgCtx(
         apiUrl = llmApiUrl,

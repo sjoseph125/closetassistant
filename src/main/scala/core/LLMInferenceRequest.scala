@@ -5,8 +5,8 @@ final case class LLMInferenceRequest(
     model: String,
     prompt: String,
     stream: Boolean = false,
-    options: LLMInferenceOptions = LLMInferenceOptions(seed = 12345),
-    format: LLMResponseFormat,
+    options: LLMInferenceOptions = LLMInferenceOptions(seed = 1),
+    format: LLMResponseFormat = LLMResponseFormat(),
     required: List[String] = List("color", "fabric", "activities", "season"), 
     images: List[String] = List.empty
 ) derives JsonEncoder
@@ -17,7 +17,7 @@ final case class LLMInferenceOptions(
 
 final case class LLMResponseFormat(
     `type`: String = "object",
-    properties: LLMResponseProperties
+    properties: LLMResponseProperties = LLMResponseProperties()
 ) derives JsonEncoder
 
 final case class LLMResponseProperties(

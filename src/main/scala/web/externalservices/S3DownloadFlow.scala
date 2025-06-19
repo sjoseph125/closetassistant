@@ -21,10 +21,10 @@ class S3DownloadFlow(cfgCtx: CfgCtx)
         streamingResult <- ZIO.serviceWithZIO[S3](_.getObject(getObjectRequest))
         content <- streamingResult.output.runCollect
       } yield content
-    }.foldCause(
-      cause => {
+    }.fold(
+      err => {
         ZIO.logError(
-          s"Failed to download file with id $fileId with cause: ${cause.dieOption.map(_.getMessage)}"
+          s"Failed to download file with id $fileId with cause: ${err.toThrowable.getMessage}"
         )
         Chunk.empty[Byte]
       },
