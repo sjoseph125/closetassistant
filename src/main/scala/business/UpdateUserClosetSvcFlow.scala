@@ -123,7 +123,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
   private def addNewClosetItem(
       closetItemKeys: List[String],
       llmResponse: Map[String, LLMInferenceResponse]
-  ) =
+  ): ZIO[DynamoDBExecutor, DynamoDBError, List[Option[ClosetItemModel]]] =
     println(closetItemKeys)
     DynamoDBQuery
       .forEach(closetItemKeys) { key =>

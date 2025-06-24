@@ -9,6 +9,7 @@ import zio.aws.s3.S3
 import zio.dynamodb.DynamoDBExecutor
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import zio.*
+import zio.http.*
 
 object ServiceLayers {
     lazy val dynamoDbLayer: ZLayer[AwsConfig, Throwable, DynamoDb] = awsConfigLayer >>> DynamoDb.live

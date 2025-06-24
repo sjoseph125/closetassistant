@@ -10,6 +10,7 @@ import scala.util.Success
 import scala.util.Failure
 import zio.dynamodb.DynamoDBExecutor
 import utils.Extensions.toHttpResponse
+import zio.http.Header
 
 object Extensions {
 //   extension (body: Body)
@@ -40,7 +41,7 @@ object Extensions {
 
   extension [A](a: A)
     def toJsonResponse(using encoder: JsonEncoder[A]): Response =
-      Response.json(a.toJson)
+      Response.json(a.toJson).addHeader(Header.AccessControlAllowOrigin.All)
 
   extension [R, E, A](zio: ZIO[R, E, A])
     def toHttpResponse(using encoder: JsonEncoder[A]): ZIO[R, Nothing, Response] =

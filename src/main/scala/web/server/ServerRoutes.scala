@@ -16,6 +16,7 @@ import core.UpdateUserCloset
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import utils.Extensions.*
 import core.SearchRequest
+import core.GetPresignedURLRequest
 
 object ServerRoutes extends Flows {
   val routes: Routes[ExecutorPresignerS3Type & Client, Nothing] =
@@ -24,8 +25,8 @@ object ServerRoutes extends Flows {
       GET / "v1" / "closet" / string("userId") -> handler {
         (userId: String, _: Request) => getUserCloset(userId).toHttpResponse
       },
-      GET / "v1" / "upload" / string("userId") -> handler {
-        (userId: String, _: Request) => getPresignedUrl(userId).toHttpResponse
+      GET / "v1" / "upload" / string("userId") / int("numOfUrls") -> handler {
+        (userId: String, numOfUrls: Int, _: Request) => getPresignedUrl(GetPresignedURLRequest(userId = userId, numOfUrls = numOfUrls)).toHttpResponse
       },
       PUT / "v1" / "closet" -> handler { (request: Request) =>
         request.body.asString

@@ -39,13 +39,13 @@ trait Flows extends Config{
       )
     )(updateUserCloset)
 
-  lazy val getPresignedUrl: String => RIO[ExecutorAndPresignerType, GetPresignedURL] = userId =>
+  lazy val getPresignedUrl: GetPresignedURLRequest => RIO[ExecutorAndPresignerType, GetPresignedURLResponse] = request =>
     new GetPresignedURLSvcFlow(
       GetPresignedURLSvcFlow.CfgCtx(
         getClosetData = getClosetData,
         bucketName = bucketName
       )
-    )(userId)
+    )(request)
     
   // lazy val recommendOutfit: SearchRequest => RIO[Client, SearchResponse] = request =>
   //   new RecommendOutfitSvcFlow(
