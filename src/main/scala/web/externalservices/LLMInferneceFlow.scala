@@ -37,7 +37,7 @@ class LLMInferneceFlow(cfgCtx: CfgCtx) {
           client.batched(request).flatMap(constructResult(imageId, _))
         )
       } yield res
-    }.map(_.foldLeft(Map.empty[String, LLMInferenceResponse])(_ ++ _))
+    }.retry(Schedule.once.addDelay(_ => Duration.fromMillis(500L))).map(_.foldLeft(Map.empty[String, LLMInferenceResponse])(_ ++ _))
   }
 
   private def constructBody(enacodedImage: String): Body =

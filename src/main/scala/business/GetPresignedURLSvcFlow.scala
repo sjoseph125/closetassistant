@@ -1,6 +1,11 @@
 package business
 import business.GetPresignedURLSvcFlow.*
-import core.{GetPresignedURLRequest, GetPresignedURLResponse, PresignedUrlType, PresignedURLs}
+import core.{
+  GetPresignedURLRequest,
+  GetPresignedURLResponse,
+  PresignedUrlType,
+  PresignedURLs
+}
 import persistence.models.UserClosetModel
 import software.amazon.awssdk.services.s3.model.{
   GetObjectRequest,
@@ -17,7 +22,13 @@ import java.util.UUID
 import scala.util.chaining.*
 import web.layers.ServiceLayers.ExecutorAndPresignerType
 
-class GetPresignedURLSvcFlow(cfgCtx: CfgCtx) extends (GetPresignedURLRequest => RIO[ExecutorAndPresignerType, GetPresignedURLResponse]) {
+class GetPresignedURLSvcFlow(cfgCtx: CfgCtx)
+    extends (
+        GetPresignedURLRequest => RIO[
+          ExecutorAndPresignerType,
+          GetPresignedURLResponse
+        ]
+    ) {
   import cfgCtx._
   override def apply(
       input: GetPresignedURLRequest
@@ -40,98 +51,119 @@ class GetPresignedURLSvcFlow(cfgCtx: CfgCtx) extends (GetPresignedURLRequest => 
           case Some(result) =>
             ZIO.logInfo(
               s"Found closet for user $userId with items: ${result.closetItemKeys.mkString(", ")}"
-            ) *>
-              ZIO.serviceWithZIO[S3Presigner] { presigner =>
-                ZIO.foreachPar(0 until numOfUrls) { _ =>
-                    ZIO
-                      .attempt(
-                        constructPresignedUrl(
-                          presigner,
-                          userId,
-                          result,
-                          urlType
-                        )
-                      )
-                      .tap(url =>
-                        ZIO.logInfo(
-                          s"Generated presigned URL for item: ${url.imageIdentifier}"
-                        )
-                      )
-                  }
-                  .map(urls => GetPresignedURLResponse(urls.toList))
+            )
+            ZIO
+              .serviceWithZIO[S3Presigner] { presigner =>
+                urlType match {
+                  case PresignedUrlType.PUT =>
+                    generatePutPresignedUrls(
+                      presigner,
+                      result.imageRepoId,
+                      numOfUrls.getOrElse(throw new Exception("Invalid request"))
+                    )
+
+                  case PresignedUrlType.GET =>
+                    generateGetPresignedUrl(
+                      presigner,
+                      result.imageRepoId,
+                      closetItemKeys
+                    )
+                }
               }
+              .map(GetPresignedURLResponse(_))
         }
       }
     )
   }
 
-  def constructPresignedUrl(
-      presigner: S3Presigner,
-      userId: String,
-      result: UserClosetModel,
-      urlType: PresignedUrlType
-  ): PresignedURLs = {
-    val imageIdentifier = UUID.randomUUID().toString().replace("-", "")
-    {
-      urlType match {
-        case PresignedUrlType.PUT =>
-          generatePutPresignedUrl(presigner, result, imageIdentifier)
-        case PresignedUrlType.GET =>
-          generateGetPresignedUrl(presigner, result, imageIdentifier)
-      }
-    }.pipe(presignedUrl =>
-      PresignedURLs(
-        imageIdentifier,
-        presignedUrl
-      )
-    )
-  }
+  // def constructPresignedUrl(
+  //     presigner: S3Presigner,
+  //     userId: String,
+  //     result: UserClosetModel,
+  //     urlType: PresignedUrlType,
+  //     closetItemKeys: List[String]
+  // ): PresignedURLs = {
+  //   val imageIdentifier = UUID.randomUUID().toString().replace("-", "")
+  //   {
+  //     urlType match {
+  //       case PresignedUrlType.PUT =>
+  //         generatePutPresignedUrl(presigner, result, imageIdentifier)
+  //       case PresignedUrlType.GET =>
+  //         generateGetPresignedUrl(presigner, result, closetItemKeys)
+  //     }
+  //   }.pipe(presignedUrl =>
+  //     PresignedURLs(
+  //       imageIdentifier,
+  //       presignedUrl
+  //     )
+  //   )
+  // }
 
-  private def generatePutPresignedUrl(
+  private def generatePutPresignedUrls(
       presigner: S3Presigner,
-      result: UserClosetModel,
-      imageIdentifier: String
-  ): String = {
-    PutObjectRequest
-      .builder()
-      .bucket(bucketName)
-      .key(s"${result.imageRepoId}/${imageIdentifier}")
-      .build()
-      .pipe(putObjectRequest =>
-        PutObjectPresignRequest
+      imageRepoId: String,
+      numOfUrls: Int
+  ): UIO[List[PresignedURLs]] = {
+    ZIO.logInfo(
+      s"Generating ${numOfUrls} PUT presigned URLs."
+    )
+    ZIO
+      .foreachPar(0 until numOfUrls) { _ =>
+        val imageIdentifier = UUID.randomUUID().toString().replace("-", "")
+        PutObjectRequest
           .builder()
-          .putObjectRequest(putObjectRequest)
-          .signatureDuration(
-            Duration.fromMillis(300000L)
-          ) // Set expiration time for the presigned URL
+          .bucket(bucketName)
+          .key(s"${imageRepoId}/${imageIdentifier}")
           .build()
-      )
-      .pipe(putPresignRequest =>
-        presigner.presignPutObject(putPresignRequest).url().toString()
-      )
+          .pipe(putObjectRequest =>
+            PutObjectPresignRequest
+              .builder()
+              .putObjectRequest(putObjectRequest)
+              .signatureDuration(
+                Duration.fromMillis(300000L)
+              ) // Set expiration time for the presigned URL
+              .build()
+          )
+          .pipe(putPresignRequest =>
+            PresignedURLs(
+              imageIdentifier = imageIdentifier,
+              presignedUrl =
+                presigner.presignPutObject(putPresignRequest).url().toString()
+            ).pipe(ZIO.succeed)
+          )
+      }
+      .map(_.toList)
   }
 
   private def generateGetPresignedUrl(
       presigner: S3Presigner,
-      result: UserClosetModel,
-      imageIdentifier: String
-  ): String = {
-    GetObjectRequest
-      .builder()
-      .bucket(bucketName)
-      .key(s"${result.imageRepoId}/${imageIdentifier}")
-      .build()
-      .pipe(getObjectRequest =>
-        GetObjectPresignRequest
-          .builder()
-          .getObjectRequest(getObjectRequest)
-          .signatureDuration(Duration.fromMillis(300000L))
-          .build()
-      )
-      .pipe(getPresignRequest =>
-        presigner.presignGetObject(getPresignRequest).url().toString()
-      )
-
+      imageRepoId: String,
+      closetItemKeys: List[String]
+  ): UIO[List[PresignedURLs]] = {
+    ZIO.logInfo(
+      s"Generating GET presigned URLs for keys ${closetItemKeys.mkString(", ")}"
+    )
+    ZIO.foreachPar(closetItemKeys) { key =>
+      GetObjectRequest
+        .builder()
+        .bucket(bucketName)
+        .key(s"$imageRepoId/$key")
+        .build()
+        .pipe(getObjectRequest =>
+          GetObjectPresignRequest
+            .builder()
+            .getObjectRequest(getObjectRequest)
+            .signatureDuration(Duration.fromMillis(300000L))
+            .build()
+        )
+        .pipe(getPresignRequest =>
+          PresignedURLs(
+            imageIdentifier = key,
+            presignedUrl =
+              presigner.presignGetObject(getPresignRequest).url().toString()
+          ).pipe(ZIO.succeed)
+        )
+    }
   }
 }
 

@@ -11,11 +11,17 @@ import persistence.models.*
 import business.GetUserClosetSvcFlow.*
 import core.UserCloset
 import zio.dynamodb.DynamoDBError.ItemError
+import core.GetPresignedURLRequest
+import web.layers.ServiceLayers.ExecutorAndPresignerType
+import core.GetPresignedURLResponse
+import core.PresignedUrlType
 
 class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
-    extends (String => URIO[DynamoDBExecutor, Option[UserCloset]]) {
+    extends (String => URIO[ExecutorAndPresignerType, Option[UserCloset]]) {
   import cfgCtx._
-  override def apply(userId: String): URIO[DynamoDBExecutor, Option[UserCloset]] = {
+  override def apply(
+      userId: String
+  ): URIO[ExecutorAndPresignerType, Option[UserCloset]] = {
     ZIO.logInfo("Starting GetUserClosetSvcFlow")
 
     getClosetData(
@@ -28,37 +34,67 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
       result => {
         result.headOption match {
 
-        case None =>
-          ZIO.logInfo(s"No closet found for user $userId") *> ZIO.succeed(None)
-          
-        case Some(_) =>
-          ZIO.logInfo(
-            s"Found closet for user $userId with items: ${result.flatMap(_.closetItemKeys).mkString(", ")}"
-          )
-          getClosetItems(result.flatMap(_.closetItemKeys).toList)
-            .foldZIO(
-              err => ZIO.logError(s"Error fetching closet items: ${err.getMessage}") *> ZIO.succeed(None),
-              items => ZIO.succeed(
+          case None =>
+            ZIO.logInfo(s"No closet found for user $userId") *> ZIO.succeed(
+              None
+            )
+
+          case Some(_) =>
+            ZIO.logInfo(
+              s"Found closet for user $userId with items: ${result.flatMap(_.closetItemKeys).mkString(", ")}"
+            )
+            val closetItemKeys = result.flatMap(_.closetItemKeys).toList
+            getClosetItems(closetItemKeys)
+              .zipWithPar(
+                getPresignedUrls(
+                  GetPresignedURLRequest(
+                    userId = userId,
+                    closetItemKeys = closetItemKeys,
+                    urlType = PresignedUrlType.GET
+                  )
+                )
+              ) { (getUserClosetRes, presignedUrls) =>
                 result.headOption.map { closet =>
                   UserCloset(
                     userId = closet.userId,
                     numOfItems = closet.closetItemKeys.size,
-                    closetItems = items
+                    closetItems = getUserClosetRes.map(item =>
+                      item.copy(presignedUrl =
+                        presignedUrls.presignedUrls
+                          .withFilter(_.imageIdentifier == item.closetItemKey)
+                          .map(_.presignedUrl)
+                          .headOption
+                      )
+                    )
                   )
                 }
+
+              }
+              .fold(
+                err =>
+                  ZIO.logError(
+                    s"Error fetching closet items: ${err.getMessage}"
+                  )
+                  None,
+                items => items
               )
-            )
         }
       }
     )
   }
 
-  private def getClosetItems(closetItemKeys: List[String]): ZIO[DynamoDBExecutor, DynamoDBError, List[ClosetItemModel]] =
-    val closetItemsBatch: ZIO[DynamoDBExecutor, DynamoDBError, List[Either[ItemError, ClosetItemModel]]] =
-      DynamoDBQuery.forEach(closetItemKeys) { key =>
-      ZIO.logInfo(s"Processing closet item key: $key")
-      getClosetItem(ClosetItemModel.closetItemKey.partitionKey === key)
-      }.execute
+  private def getClosetItems(
+      closetItemKeys: List[String]
+  ): ZIO[DynamoDBExecutor, DynamoDBError, List[ClosetItemModel]] =
+    val closetItemsBatch: ZIO[DynamoDBExecutor, DynamoDBError, List[
+      Either[ItemError, ClosetItemModel]
+    ]] =
+      DynamoDBQuery
+        .forEach(closetItemKeys) { key =>
+          ZIO.logInfo(s"Processing closet item key: $key")
+          getClosetItem(ClosetItemModel.closetItemKey.partitionKey === key)
+        }
+        .execute
     for {
       items <- closetItemsBatch
       _ <- ZIO.logInfo(s"Fetched ${items.size} closet items")
@@ -70,11 +106,21 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
           None
       }
     }
-  }
+}
 
 object GetUserClosetSvcFlow {
   case class CfgCtx(
-      getClosetData: KeyConditionExpr[UserClosetModel] => ZIO[DynamoDBExecutor, Throwable, Chunk[UserClosetModel]],
-      getClosetItem: KeyConditionExpr.PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[ClosetItemModel, Either[ItemError, ClosetItemModel]]
+      getClosetData: KeyConditionExpr[UserClosetModel] => ZIO[
+        DynamoDBExecutor,
+        Throwable,
+        Chunk[UserClosetModel]
+      ],
+      getClosetItem: KeyConditionExpr.PrimaryKeyExpr[
+        ClosetItemModel
+      ] => DynamoDBQuery[ClosetItemModel, Either[ItemError, ClosetItemModel]],
+      getPresignedUrls: GetPresignedURLRequest => RIO[
+        ExecutorAndPresignerType,
+        GetPresignedURLResponse
+      ]
   )
 }

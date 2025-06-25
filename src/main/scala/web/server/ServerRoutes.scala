@@ -26,7 +26,7 @@ object ServerRoutes extends Flows {
         (userId: String, _: Request) => getUserCloset(userId).toHttpResponse
       },
       GET / "v1" / "upload" / string("userId") / int("numOfUrls") -> handler {
-        (userId: String, numOfUrls: Int, _: Request) => getPresignedUrl(GetPresignedURLRequest(userId = userId, numOfUrls = numOfUrls)).toHttpResponse
+        (userId: String, numOfUrls: Int, _: Request) => getPresignedUrls(GetPresignedURLRequest(userId = userId, numOfUrls = Option(numOfUrls))).toHttpResponse
       },
       PUT / "v1" / "closet" -> handler { (request: Request) =>
         request.body.asString

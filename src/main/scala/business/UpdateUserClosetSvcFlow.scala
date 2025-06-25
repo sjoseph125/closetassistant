@@ -1,12 +1,7 @@
 package business
 
 import business.UpdateUserClosetSvcFlow._
-import core.{
-  UpdateUserCloset,
-  UserCloset,
-  PerformInference,
-  LLMInferenceResponse
-}
+import core.*
 import persistence.models.*
 import persistence.models.ClosetItemModel.closetItemKey
 import scala.util.chaining.scalaUtilChainingOps
@@ -19,10 +14,12 @@ import zio.aws.s3.S3
 import web.layers.ServiceLayers.*
 import zio.http.{Response, Client}
 import persistence.queries.DynamoDBQueries.update
+import persistence.models.ClosetItemModel.itemMetadata
+import software.amazon.awssdk.services.s3.presigner.S3Presigner
 
 class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
     extends (
-        UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndS3Type, Option[
+        UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndPresignerType, Option[
           UserCloset
         ]]
     ) {
@@ -30,7 +27,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
 
   override def apply(
       updateUserCloset: UpdateUserCloset
-  ): RIO[ClientAndS3 & ExecutorAndS3Type, Option[UserCloset]] = {
+  ): RIO[ClientAndS3 & ExecutorAndPresignerType, Option[UserCloset]] = {
     import updateUserCloset.*
     ZIO.logInfo(
       s"Starting UpdateUserCloset flow for user ${updateUserCloset.userId}"
@@ -42,7 +39,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
         ZIO.logError(
           s"Error fetching closet data for user $userId: ${err.getMessage}"
         ) *> ZIO.fail(new Exception("Failed to fetch closet data")),
-      result => {
+      result =>
         result.headOption match {
           case None =>
             ZIO.logInfo(s"No closet found for user $userId") *> ZIO.fail(
@@ -59,9 +56,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
               closetItemKeys,
               result.imageRepoId
             )
-
         }
-      }
     )
   }
 
@@ -70,7 +65,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
       existingClosetItemKeys: List[String],
       closetItemKeys: List[String],
       imageRepoId: String
-  ): RIO[ClientAndS3 & DynamoDBExecutor, Option[UserCloset]] = {
+  ): RIO[ClientAndS3 & ExecutorAndPresignerType, Option[UserCloset]] = {
     {
       if (updateUserCloset.deleteItems) deleteClosetItems(closetItemKeys)
       else {
@@ -131,7 +126,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
           ClosetItemModel(
             closetItemKey = key,
             itemType = "some type",
-            llmResponse
+            itemMetadata = llmResponse
               .get(key)
               .getOrElse(
                 throw new Exception(s"No LLM response found for key: $key")
@@ -158,7 +153,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
       closetItemKeys: List[String],
       existingClosetItemKeys: List[String],
       deleteItems: Boolean
-  ): ZIO[DynamoDBExecutor, DynamoDBError, Option[UserCloset]] =
+  ): ZIO[ExecutorAndPresignerType, DynamoDBError, Option[UserCloset]] =
 
     ZIO.logInfo(
       s"Updating closet items: ${closetItemKeys.mkString(", ")}, deleteItems: $deleteItems"
@@ -194,7 +189,7 @@ object UpdateUserClosetSvcFlow {
           PrimaryKeyExpr[UserClosetModel],
           Action[UserClosetModel]
       ) => ZIO[DynamoDBExecutor, DynamoDBError, Option[UserClosetModel]],
-      getUserCloset: String => URIO[DynamoDBExecutor, Option[UserCloset]],
+      getUserCloset: String => URIO[ExecutorAndPresignerType, Option[UserCloset]],
       deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[
         ClosetItemModel,
         Option[ClosetItemModel]

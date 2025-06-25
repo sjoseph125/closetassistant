@@ -19,15 +19,16 @@ import zio.aws.s3.S3
 
 trait Flows extends Config{
 
-  lazy val getUserCloset: String => URIO[DynamoDBExecutor, Option[UserCloset]] = userId =>
+  lazy val getUserCloset: String => URIO[ExecutorAndPresignerType, Option[UserCloset]] = userId =>
     new GetUserClosetSvcFlow(
       GetUserClosetSvcFlow.CfgCtx(
         getClosetData = getClosetData,
-        getClosetItem = getClosetItem
+        getClosetItem = getClosetItem,
+        getPresignedUrls = getPresignedUrls
       )
     )(userId)
 
-  lazy val updateUserCloset: UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndS3Type, Option[UserCloset]] = updateUserCloset =>
+  lazy val updateUserCloset: UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndPresignerType, Option[UserCloset]] = updateUserCloset =>
     new UpdateUserClosetSvcFlow(
       UpdateUserClosetSvcFlow.CfgCtx(
         getClosetData = getClosetData,
@@ -39,7 +40,7 @@ trait Flows extends Config{
       )
     )(updateUserCloset)
 
-  lazy val getPresignedUrl: GetPresignedURLRequest => RIO[ExecutorAndPresignerType, GetPresignedURLResponse] = request =>
+  lazy val getPresignedUrls: GetPresignedURLRequest => RIO[ExecutorAndPresignerType, GetPresignedURLResponse] = request =>
     new GetPresignedURLSvcFlow(
       GetPresignedURLSvcFlow.CfgCtx(
         getClosetData = getClosetData,
