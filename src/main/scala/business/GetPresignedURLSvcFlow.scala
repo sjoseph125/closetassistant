@@ -59,7 +59,7 @@ class GetPresignedURLSvcFlow(cfgCtx: CfgCtx)
                     generatePutPresignedUrls(
                       presigner,
                       result.imageRepoId,
-                      numOfUrls.getOrElse(throw new Exception("Invalid request"))
+                      numOfUrls.getOrElse(throw new Exception("Invalid request")).toInt
                     )
 
                   case PresignedUrlType.GET =>

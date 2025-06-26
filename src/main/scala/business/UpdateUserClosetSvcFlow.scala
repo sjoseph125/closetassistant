@@ -113,6 +113,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
       s"Running LLM inference for closet items: ${closetItemKeys.mkString(", ")}"
     )
     llmInferenceFlow(PerformInference(imageRepoId, closetItemKeys))
+    .retry(Schedule.once.addDelay(_ => Duration.fromMillis(1000L)))
   }
 
   private def addNewClosetItem(

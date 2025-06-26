@@ -52,6 +52,5 @@ object Extensions {
             body = Body.fromString(s"Failed to excecute request with error: ${e.toString}")
           ),
         a => a.toJsonResponse
-      )
-     
+      )     
 }

@@ -3,6 +3,7 @@ package web.server
 import zio._
 import zio.http.*
 import zio.json.*
+import zio.http.Middleware.cors
 
 import zio.ZIOAppDefault
 import web.layers.ServiceLayers
@@ -26,7 +27,7 @@ object HttpServer extends ZIOAppDefault {
       )
       // Server.serve can take Routes[Any, Response]
       _ <- Server
-        .serve(ServerRoutes.routes)
+        .serve(ServerRoutes.routes @@ cors)
         .provide(
           // ZIO HTTP Server Layers
           ZLayer.succeed(serverConfig),

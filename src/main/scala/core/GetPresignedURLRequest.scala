@@ -3,7 +3,7 @@ package core
 final case class GetPresignedURLRequest(
     userId: String,
     urlType: PresignedUrlType = PresignedUrlType.PUT,
-    numOfUrls: Option[Int] = None,
+    numOfUrls: Option[String] = None,
     closetItemKeys: List[String] = Nil
 )
 
