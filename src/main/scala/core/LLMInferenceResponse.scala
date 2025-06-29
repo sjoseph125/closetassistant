@@ -9,10 +9,17 @@ final case class LLMInferenceResponseRaw(
 ) derives JsonDecoder
 
 final case class LLMResponse(
-    color: String,
+    itemName: String,
+    category: String,
+    subCategory: String,
+    colors: List[String] = List.empty,
+    style: List[String] = List.empty,
     fabric: String,
-    activities: List[String],
-    season: List[String]
+    activities: List[String] = List.empty,
+    season: List[String] = List.empty,
+    warmth: String,
+    description: String,
+    pattern: String
 ) derives JsonDecoder, JsonEncoder
 
 

@@ -22,7 +22,7 @@ object HttpServer extends ZIOAppDefault {
       
 
     for {
-      _ <- ZIO.logInfo(
+      _ <- logInfo(
         "Starting HTTP server with AWS integration on port 8080..."
       )
       // Server.serve can take Routes[Any, Response]

@@ -58,7 +58,9 @@ class LLMInferneceFlow(cfgCtx: CfgCtx) {
       str => {
         ZIO.fromEither(str.fromJson[LLMInferenceResponseRaw]).fold(
           err => throw new Exception(s"Failed to parse response for imageId $imageId: $err"),
-          parsed => Map(imageId -> LLMInferenceResponse(
+          parsed => 
+            println(parsed.response)
+            Map(imageId -> LLMInferenceResponse(
             response = parsed.response.fromJson[LLMResponse] match {
               case Right(llmResponse) => llmResponse
               case Left(error) =>

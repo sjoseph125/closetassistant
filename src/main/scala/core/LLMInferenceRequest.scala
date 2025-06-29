@@ -5,9 +5,21 @@ final case class LLMInferenceRequest(
     model: String,
     prompt: String,
     stream: Boolean = false,
-    options: LLMInferenceOptions = LLMInferenceOptions(seed = 1),
+    options: LLMInferenceOptions = LLMInferenceOptions(seed = 1654),
     format: LLMResponseFormat = LLMResponseFormat(),
-    required: List[String] = List("color", "fabric", "activities", "season"), 
+    required: List[String] = List(
+      "itemName",
+      "category",
+      "subCategory",
+      "colors",
+      "style",
+      "season",
+      "warmth",
+      "pattern",      
+      "fabric",
+      "activities",
+      "description"
+    ),
     images: List[String] = List.empty
 ) derives JsonEncoder
 
@@ -21,10 +33,17 @@ final case class LLMResponseFormat(
 ) derives JsonEncoder
 
 final case class LLMResponseProperties(
-    color: LLMResponsePropertyType = LLMResponsePropertyType("string"),
+    itemName: LLMResponsePropertyType = LLMResponsePropertyType("string"),
+    category: LLMResponsePropertyType = LLMResponsePropertyType("string"),
+    subCategory: LLMResponsePropertyType = LLMResponsePropertyType("string"),
+    colors: LLMResponsePropertyType = LLMResponsePropertyType("array"),
+    style: LLMResponsePropertyType = LLMResponsePropertyType("array"),
+    season: LLMResponsePropertyType = LLMResponsePropertyType("array"),
+    warmth: LLMResponsePropertyType = LLMResponsePropertyType("string"),
+    pattern: LLMResponsePropertyType = LLMResponsePropertyType("string"),
     fabric: LLMResponsePropertyType = LLMResponsePropertyType("string"),
     activities: LLMResponsePropertyType = LLMResponsePropertyType("array"),
-    season: LLMResponsePropertyType = LLMResponsePropertyType("array")
+    description: LLMResponsePropertyType = LLMResponsePropertyType("string"),
 ) derives JsonEncoder
 
 final case class LLMResponsePropertyType(`type`: String) derives JsonEncoder
