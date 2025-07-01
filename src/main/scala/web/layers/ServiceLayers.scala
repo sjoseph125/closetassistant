@@ -10,6 +10,7 @@ import zio.dynamodb.DynamoDBExecutor
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
 import zio.*
 import zio.http.*
+import zio.http.netty.NettyConfig
 
 object ServiceLayers {
     lazy val dynamoDbLayer: ZLayer[AwsConfig, Throwable, DynamoDb] = awsConfigLayer >>> DynamoDb.live
@@ -19,6 +20,8 @@ object ServiceLayers {
     lazy val s3PresignerLayer: ZLayer[AwsConfig, Throwable, S3Presigner] = awsConfigLayer >>> ZLayer.succeed(S3Presigner.builder().build())
 
     lazy val s3Layer: ZLayer[AwsConfig, Throwable, S3] = awsConfigLayer >>> S3.live
+    lazy val clientLayer = (ZLayer.succeed(Client.Config.default.connectionTimeout(Duration.fromMillis(60000L))) ++ ZLayer.succeed(NettyConfig.defaultWithFastShutdown) ++
+      DnsResolver.default) >>> Client.live
 
     lazy val ExecutorPresignerS3 = executor ++ s3PresignerLayer ++ s3Layer
 

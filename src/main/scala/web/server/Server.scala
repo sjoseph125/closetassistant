@@ -8,7 +8,7 @@ import zio.http.Middleware.cors
 import zio.ZIOAppDefault
 import web.layers.ServiceLayers
 import web.layers.AwsLayers
-import web.layers.ServiceLayers.ExecutorAndPresignerType
+import web.layers.ServiceLayers.{ExecutorPresignerS3, clientLayer}
 
 object HttpServer extends ZIOAppDefault {
 
@@ -18,8 +18,7 @@ object HttpServer extends ZIOAppDefault {
     val serverConfig = Server.Config.default
       .port(8080)
       .keepAlive(true)
-      .idleTimeout(30.seconds)
-      
+      .idleTimeout(60.seconds)      
 
     for {
       _ <- logInfo(
@@ -33,8 +32,8 @@ object HttpServer extends ZIOAppDefault {
           ZLayer.succeed(serverConfig),
           Server.live,
           AwsLayers.awsConfigLayer,
-          ServiceLayers.ExecutorPresignerS3,
-          Client.default
+          ExecutorPresignerS3,
+          clientLayer
         )
         .catchAllDefect(defect =>
           logErrorCause(

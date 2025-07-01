@@ -59,11 +59,13 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
                     userId = closet.userId,
                     numOfItems = closet.closetItemKeys.size,
                     closetItems = getUserClosetRes.map(item =>
-                      item.copy(presignedUrl =
-                        presignedUrls.presignedUrls
+                      item.copy(
+                        presignedUrl = presignedUrls.presignedUrls
                           .withFilter(_.imageIdentifier == item.closetItemKey)
                           .map(_.presignedUrl)
-                          .headOption
+                          .headOption,
+                        itemMetadata = None,
+                        itemName = item.itemMetadata.map(_.response.itemName)
                       )
                     )
                   )
@@ -75,7 +77,8 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
                   ZIO.logError(
                     s"Error fetching closet items: ${err.getMessage}"
                   )
-                  None,
+                  None
+                ,
                 items => items
               )
         }

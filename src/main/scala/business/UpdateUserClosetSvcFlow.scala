@@ -77,7 +77,6 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
               ) *>
                 ZIO.fail(new Exception("Failed to run LLM inference")),
             llmResponse =>
-              println(llmResponse)
               addNewClosetItem(closetItemKeys, llmResponse)
           )
       }
@@ -126,12 +125,8 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
         addClosetItem(
           ClosetItemModel(
             closetItemKey = key,
-            itemType = "some type",
-            itemMetadata = llmResponse
-              .get(key)
-              .getOrElse(
-                throw new Exception(s"No LLM response found for key: $key")
-              )
+            itemType = llmResponse.get(key).map(_.response.category),
+            itemMetadata = llmResponse.get(key)
           )
         )
       }

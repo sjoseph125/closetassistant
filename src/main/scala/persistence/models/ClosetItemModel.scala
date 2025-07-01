@@ -8,13 +8,14 @@ import core.LLMInferenceResponse
 
 final case class ClosetItemModel(
     closetItemKey: String,
-    itemType: String,
+    itemType: Option[String] = None,
     presignedUrl: Option[String] = None,
-    itemMetadata: LLMInferenceResponse
+    itemMetadata: Option[LLMInferenceResponse] = None,
+    itemName: Option[String] = None
 ) derives JsonEncoder
 
 object ClosetItemModel {
-    implicit val schema: Schema.CaseClass4[String, String, Option[String], LLMInferenceResponse, ClosetItemModel] = zio.schema.DeriveSchema.gen[ClosetItemModel]
-    val (closetItemKey, itemType, presignedUrl, itemMetadata) = ProjectionExpression.accessors[ClosetItemModel]
+    implicit val schema: Schema.CaseClass5[String, Option[String], Option[String], Option[LLMInferenceResponse], Option[String], ClosetItemModel] = zio.schema.DeriveSchema.gen[ClosetItemModel]
+    val (closetItemKey, itemType, presignedUrl, itemMetadata, itemName) = ProjectionExpression.accessors[ClosetItemModel]
 }
 
