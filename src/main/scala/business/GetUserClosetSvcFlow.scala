@@ -22,25 +22,27 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
   override def apply(
       userId: String
   ): URIO[ExecutorAndPresignerType, Option[UserCloset]] = {
-    ZIO.logInfo("Starting GetUserClosetSvcFlow")
+    println("Starting GetUserClosetSvcFlow")
 
     getClosetData(
       UserClosetModel.userId.partitionKey === userId
     ).foldZIO(
       err =>
-        ZIO.logError(
+        println(
           s"Error fetching closet data for user $userId: ${err.getMessage}"
-        ) *> ZIO.succeed(None),
+        )
+        ZIO.succeed(None),
       result => {
         result.headOption match {
 
           case None =>
-            ZIO.logInfo(s"No closet found for user $userId") *> ZIO.succeed(
+            println(s"No closet found for user $userId")
+            ZIO.succeed(
               None
             )
 
           case Some(_) =>
-            ZIO.logInfo(
+            println(
               s"Found closet for user $userId with items: ${result.flatMap(_.closetItemKeys).mkString(", ")}"
             )
             val closetItemKeys = result.flatMap(_.closetItemKeys).toList
@@ -64,8 +66,8 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
                           .withFilter(_.imageIdentifier == item.closetItemKey)
                           .map(_.presignedUrl)
                           .headOption,
-                        itemMetadata = None,
-                        itemName = item.itemMetadata.map(_.response.itemName)
+                        // itemMetadata = None,
+                        itemName = item.itemMetadata.flatMap(_.responseAddItem.map(_.itemName))
                       )
                     )
                   )

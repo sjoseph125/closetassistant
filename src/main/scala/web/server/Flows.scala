@@ -17,9 +17,10 @@ import web.externalservices.*
 import web.server.ExternalSvcFlows.*
 import zio.aws.s3.S3
 
-trait Flows extends Config{
+trait Flows extends Config {
 
-  lazy val getUserCloset: String => URIO[ExecutorAndPresignerType, Option[UserCloset]] = userId =>
+  lazy val getUserCloset
+      : String => URIO[ExecutorAndPresignerType, Option[UserCloset]] = userId =>
     new GetUserClosetSvcFlow(
       GetUserClosetSvcFlow.CfgCtx(
         getClosetData = getClosetData,
@@ -28,7 +29,10 @@ trait Flows extends Config{
       )
     )(userId)
 
-  lazy val updateUserCloset: UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndPresignerType, Option[UserCloset]] = updateUserCloset =>
+  lazy val updateUserCloset
+      : UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndPresignerType, Option[
+        UserCloset
+      ]] = updateUserCloset =>
     new UpdateUserClosetSvcFlow(
       UpdateUserClosetSvcFlow.CfgCtx(
         getClosetData = getClosetData,
@@ -36,55 +40,88 @@ trait Flows extends Config{
         updateClosetData = updateClosetData,
         getUserCloset = getUserCloset,
         deleteClosetItem = deleteClosetItem,
-        llmInferenceFlow = llmPostRequest
+        llmInferenceFlow = llmPostRequestAddItem
       )
     )(updateUserCloset)
 
-  lazy val getPresignedUrls: GetPresignedURLRequest => RIO[ExecutorAndPresignerType, GetPresignedURLResponse] = request =>
+  lazy val getPresignedUrls: GetPresignedURLRequest => RIO[
+    ExecutorAndPresignerType,
+    GetPresignedURLResponse
+  ] = request =>
     new GetPresignedURLSvcFlow(
       GetPresignedURLSvcFlow.CfgCtx(
         getClosetData = getClosetData,
         bucketName = bucketName
       )
     )(request)
-    
-  // lazy val recommendOutfit: SearchRequest => RIO[Client, SearchResponse] = request =>
-  //   new RecommendOutfitSvcFlow(
-  //     RecommendOutfitSvcFlow.CfgCtx(
-  //       inferSearchRequest = llmPostRequest
-  //     )
-  //   )(request)
+
+  lazy val recommendOutfit: SearchRequest => RIO[ExecutorAndPresignerType & Client, SearchResponse] = request =>
+    new RecommendOutfitSvcFlow(
+      RecommendOutfitSvcFlow.CfgCtx(
+        llmSearchOutfits = llmSearchOutfits,
+        getUserCloset = getUserCloset,
+      )
+    )(request)
 }
 
 object DBFlows extends Config {
-  lazy val getClosetData: (KeyConditionExpr[UserClosetModel]) => ZIO[DynamoDBExecutor, Throwable, Chunk[UserClosetModel]] = 
-    (keyCondition) => DynamoDBQueries.queryAll[UserClosetModel](closetDataTableName, keyCondition)
-    
-  lazy val getClosetItem: (KeyConditionExpr.PrimaryKeyExpr[ClosetItemModel]) => DynamoDBQuery[ClosetItemModel, Either[ItemError, ClosetItemModel]] = 
-    keyCondition => DynamoDBQueries.get[ClosetItemModel](closetItemTableName)(keyCondition)
+  lazy val getClosetData: (
+      KeyConditionExpr[UserClosetModel]
+  ) => ZIO[DynamoDBExecutor, Throwable, Chunk[UserClosetModel]] =
+    (keyCondition) =>
+      DynamoDBQueries
+        .queryAll[UserClosetModel](closetDataTableName, keyCondition)
 
-  lazy val updateClosetData: (PrimaryKeyExpr[UserClosetModel], Action[UserClosetModel]) => ZIO[DynamoDBExecutor, DynamoDBError, Option[UserClosetModel]] = 
-    (key, action) => DynamoDBQueries.update[UserClosetModel](closetDataTableName, key, action)
-    
-  lazy val addClosetItem: ClosetItemModel => DynamoDBQuery[ClosetItemModel, Option[ClosetItemModel]] = 
+  lazy val getClosetItem: (
+      KeyConditionExpr.PrimaryKeyExpr[ClosetItemModel]
+  ) => DynamoDBQuery[ClosetItemModel, Either[ItemError, ClosetItemModel]] =
+    keyCondition =>
+      DynamoDBQueries.get[ClosetItemModel](closetItemTableName)(keyCondition)
+
+  lazy val updateClosetData: (
+      PrimaryKeyExpr[UserClosetModel],
+      Action[UserClosetModel]
+  ) => ZIO[DynamoDBExecutor, DynamoDBError, Option[UserClosetModel]] =
+    (key, action) =>
+      DynamoDBQueries.update[UserClosetModel](closetDataTableName, key, action)
+
+  lazy val addClosetItem
+      : ClosetItemModel => DynamoDBQuery[ClosetItemModel, Option[
+        ClosetItemModel
+      ]] =
     item => DynamoDBQueries.put[ClosetItemModel](closetItemTableName, item)
-    
-  lazy val deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[ClosetItemModel, Option[ClosetItemModel]] = 
+
+  lazy val deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[
+    ClosetItemModel,
+    Option[ClosetItemModel]
+  ] =
     key => DynamoDBQueries.deleteItem[ClosetItemModel](closetItemTableName, key)
 }
 
 object ExternalSvcFlows extends Config {
-  lazy val llmPostRequest: PerformInference => RIO[ClientAndS3, Map[String, LLMInferenceResponse]] = request => 
-    new LLMInferneceFlow(
-      LLMInferneceFlow.CfgCtx(
+  lazy val llmPostRequestAddItem: PerformInference => RIO[ClientAndS3, Map[
+    String,
+    LLMInferenceResponse
+  ]] = request =>
+    new LLMInferneceAddItemsFlow(
+      LLMInferneceAddItemsFlow.CfgCtx(
         apiUrl = llmApiUrl,
         s3Download = s3Download,
         model = model,
-        prompt = prompt
+        prompt = itemMetadataPrompt
       )
     ).postRequest(request)
 
-  lazy val s3Download: String => URIO[S3, Chunk[Byte]] = imageIdentifier => 
+  lazy val llmSearchOutfits: String => RIO[Client, LLMInferenceResponse] = request =>
+    new LLMInferenceSearchOutfitsFlow(
+      LLMInferenceSearchOutfitsFlow.CfgCtx(
+        apiUrl = llmApiUrl,
+        model = model,
+        prompt = userSearchPrompt
+      )
+    )(request)
+
+  lazy val s3Download: String => URIO[S3, Chunk[Byte]] = imageIdentifier =>
     new S3DownloadFlow(
       S3DownloadFlow.CfgCtx(
         bucketName = bucketName

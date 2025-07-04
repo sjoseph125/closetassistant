@@ -7,9 +7,9 @@ abstract class Config {
     "arn:aws:dynamodb:us-east-1:288761768209:table/closet_items"
   lazy val bucketName = "closet-assistant-image-repository"
   lazy val llmApiUrl =
-    "https://l3nlilbp8mjs9q-11434.proxy.runpod.net/api/generate"
+    "https://eoao8so1ckzinx-11434.proxy.runpod.net/api/generate"
   lazy val model = "gemma3:27b"
-  lazy val prompt = """
+  lazy val itemMetadataPrompt = """
     Your Role: You are an expert fashion data analyst and stylist. Your task is to analyze images of clothing items and generate a rich, structured metadata profile for each one. This data will power a smart virtual closet and outfit recommendation engine. Accuracy and consistency are paramount.
 
 Your Task:
@@ -33,11 +33,10 @@ Your output MUST be a single, valid JSON object and nothing else. Adhere strictl
 9.  "fabric" (string): The type of fabric the item is made out of, such as wool, cotton, leather, etc.
 10. "activities" (array of strings): An array of activities the item could be worn at. For example, a suit could be worn to church, high-end restuarant, etc.
 11. "description" (string): A brief (1-2 sentence) description of the item, as if for a user.
+12. "suggestedPairingColors" (array of strings): Based on color theory, provide an array of color names that would pair well with the item's main colors. Include a mix of safe neutrals (like White, Black, Grey, Beige), analogous colors, and one or two complementary or accent colors for more stylish options. This field is for identifying other items to build an outfit.
 
 ---
 Example:
-
-
 
 Your Output:
 {
@@ -50,9 +49,77 @@ Your Output:
   "warmth": 7,
   "pattern": "Solid",
   "fabric": "Wool",
-  "activities": ["church", "dinner", "business events"]
-  "description": "A classic, single-breasted wool blazer in a deep navy blue. Versatile enough for the office or a smart casual event."
+  "activities": ["church", "dinner", "business events"],
+  "description": "A classic, single-breasted wool blazer in a deep navy blue. Versatile enough for the office or a smart casual event.",
+  "suggestedPairingColors": ["White", "Black", "Grey", "Beige", "Burgundy", "Olive Green"]
 }
 
 Now, analyze the given image and provide the JSON output."""
+
+  lazy val userSearchPrompt =
+    """**Your Role:** You are an expert Natural Language Understanding (NLU) system. Your sole purpose is to deconstruct a user's request for an outfit recommendation and convert it into a structured JSON object. You must infer context from the user's language and the provided environmental details.
+
+**Contextual Information:**
+* **Current Date & Time:** Thursday, July 3, 2025, 12:56 PM EDT
+* **Current Location:** Takoma Park, Maryland, United States
+
+**Your Task:**
+Analyze the user's request below. Based on the request and the contextual information, generate a single, valid JSON object that captures all relevant parameters for a database query.
+* **User Request:** {USER_REQUEST}
+
+**JSON Output Schema and Rules:**
+Your output MUST be a single, valid JSON object and nothing else. Do not add explanations. Adhere strictly to the following schema. If a value cannot be reasonably determined from the request, use `null`.
+
+1. "style" (array of strings)
+      - discription: "The determined style or occasion. If multiple are mentioned (e.g., for a trip), include all."
+      - allowedValues: ["Casual", "Business Casual", "Formal", "Sporty", "Loungewear", "Evening", "Trendy"]
+2. "season" (array of strings)
+      - discription: "The determined season. Infer from explicit mentions or from dates (e.g., 'December' implies 'Winter')."
+      - allowedValues: ["Spring", "Summer", "Fall", "Winter", "All-Season"]
+3. "forcedItems" (array of strings)
+      - discription: "A list of specific items the user insists on wearing. Extract descriptions like 'my red dress' or 'new leather jacket'."
+4. "location" (string)
+      - discription: "The city, state, or country mentioned for the event or trip. Defaults to the current location if not specified but relevant."
+
+---
+**Examples:**
+
+**User Request 1:** "What can I wear for a casual brunch this spring?"
+**Your Output 1:**
+{
+  "style": ["Casual", "Evening"],
+  "season": ["Spring"],
+  "forcedItems": null,
+  "location": "Takoma Park, Maryland, United States"
+}
+
+**User Request 2:** "It's supposed to be cold and rainy tomorrow, what should I wear to work?"
+**Your Output 2:**
+{
+  "style": ["Business Casual"],
+  "season": ["Fall", "Winter"],
+  "forcedItems": null,
+  "location": "Takoma Park, Maryland, United States"
+}
+
+**User Request 3:** "I need help figuring out what to wear with my new black boots for a night out."
+**Your Output 3:**
+{
+  "style": ["Evening", "Trendy"],
+  "season": null,
+  "forcedItems": ["new black boots"],
+  "location": "Takoma Park, Maryland, United States"
+}
+
+**User Request 4:** "I'm packing for a trip to Miami next week. I need outfits for the beach and for some nice dinners."
+**Your Output 4:**
+{
+  "style": ["Sporty", "Evening", "Formal"],
+  "season": ["Summer"],
+  "forcedItems": null,
+  "location": "Miami"
+}
+
+---
+**Now, process the following user request.**"""
 }

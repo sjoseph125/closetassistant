@@ -29,24 +29,26 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
       updateUserCloset: UpdateUserCloset
   ): RIO[ClientAndS3 & ExecutorAndPresignerType, Option[UserCloset]] = {
     import updateUserCloset.*
-    ZIO.logInfo(
+    println(
       s"Starting UpdateUserCloset flow for user ${updateUserCloset.userId}"
     )
     getClosetData(
       UserClosetModel.userId.partitionKey === userId
     ).foldZIO(
       err =>
-        ZIO.logError(
+        println(
           s"Error fetching closet data for user $userId: ${err.getMessage}"
-        ) *> ZIO.fail(new Exception("Failed to fetch closet data")),
+        )
+        ZIO.fail(new Exception("Failed to fetch closet data")),
       result =>
         result.headOption match {
           case None =>
-            ZIO.logInfo(s"No closet found for user $userId") *> ZIO.fail(
+            println(s"No closet found for user $userId")
+            ZIO.fail(
               new Exception("No closet found")
             )
           case Some(result) =>
-            ZIO.logInfo(
+            println(
               s"Found closet for user $userId with ${result.closetItemKeys.size} items"
             )
 
@@ -66,53 +68,50 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
       closetItemKeys: List[String],
       imageRepoId: String
   ): RIO[ClientAndS3 & ExecutorAndPresignerType, Option[UserCloset]] = {
-    {
-      if (updateUserCloset.deleteItems) deleteClosetItems(closetItemKeys)
-      else {
-        runLLMInference(imageRepoId, closetItemKeys)
-          .foldZIO(
-            cause =>
-              ZIO.logError(
-                s"Error running LLM inference for user ${updateUserCloset.userId}: ${cause.getMessage}"
-              ) *>
-                ZIO.fail(new Exception("Failed to run LLM inference")),
-            llmResponse =>
-              addNewClosetItem(closetItemKeys, llmResponse)
-          )
-      }
+    if (updateUserCloset.deleteItems) deleteClosetItems(closetItemKeys)
+    else {
+      runLLMInference(imageRepoId, closetItemKeys)
+      // .foldZIO(
+      //   cause =>
+      //     ZIO.logError(
+      //       s"Error running LLM inference for user ${updateUserCloset.userId}: ${cause.getMessage}"
+      //     ) *>
+      //       ZIO.fail(new Exception("Failed to run LLM inference")),
+      //   llmResponse =>
+      //     addNewClosetItem(closetItemKeys, llmResponse)
+      // )
+    }
 
-    }.foldZIO(
-      err =>
-        ZIO.logError(
-          s"Error updating closet items: ${err.getMessage}"
-        ) *>
-          ZIO.fail(new Exception("Failed to add closet items")),
-      res =>
-        ZIO.logInfo(
-          s"Updated closet itmes for user ${updateUserCloset.userId} with items: ${closetItemKeys
-              .mkString(", ")} " +
-            s"and action: ${
-                if (updateUserCloset.deleteItems) "delete" else "add"
-              }"
-        )
-        updateClosetDataWithItems(
-          updateUserCloset.userId,
-          closetItemKeys,
-          existingClosetItemKeys,
-          deleteItems = updateUserCloset.deleteItems
-        )
-    )
-  }
+  }.foldZIO(
+    err =>
+      println(
+        s"Error updating closet items: ${err.getMessage}"
+      )
+      ZIO.fail(new Exception("Failed to add closet items")),
+    res =>
+      println(
+        s"Updated closet itmes for user ${updateUserCloset.userId} with items: ${closetItemKeys
+            .mkString(", ")} " +
+          s"and action: ${if (updateUserCloset.deleteItems) "delete" else "add"}"
+      )
+      updateClosetDataWithItems(
+        updateUserCloset.userId,
+        closetItemKeys,
+        existingClosetItemKeys,
+        deleteItems = updateUserCloset.deleteItems
+      )
+  )
 
   private def runLLMInference(
       imageRepoId: String,
       closetItemKeys: List[String]
-  ): RIO[ClientAndS3, Map[String, LLMInferenceResponse]] = {
-    ZIO.logInfo(
+  ): RIO[ClientAndS3 & DynamoDBExecutor, List[Option[ClosetItemModel]]] = {
+    println(
       s"Running LLM inference for closet items: ${closetItemKeys.mkString(", ")}"
     )
     llmInferenceFlow(PerformInference(imageRepoId, closetItemKeys))
-    .retry(Schedule.once.addDelay(_ => Duration.fromMillis(1000L)))
+      .flatMap(llmResponse => addNewClosetItem(closetItemKeys, llmResponse))
+      .retry(Schedule.once.addDelay(_ => Duration.fromMillis(1000L)))
   }
 
   private def addNewClosetItem(
@@ -125,7 +124,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
         addClosetItem(
           ClosetItemModel(
             closetItemKey = key,
-            itemType = llmResponse.get(key).map(_.response.category),
+            itemType = llmResponse.get(key).flatMap(_.responseAddItem.map(_.category)),
             itemMetadata = llmResponse.get(key)
           )
         )
@@ -185,7 +184,9 @@ object UpdateUserClosetSvcFlow {
           PrimaryKeyExpr[UserClosetModel],
           Action[UserClosetModel]
       ) => ZIO[DynamoDBExecutor, DynamoDBError, Option[UserClosetModel]],
-      getUserCloset: String => URIO[ExecutorAndPresignerType, Option[UserCloset]],
+      getUserCloset: String => URIO[ExecutorAndPresignerType, Option[
+        UserCloset
+      ]],
       deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[
         ClosetItemModel,
         Option[ClosetItemModel]

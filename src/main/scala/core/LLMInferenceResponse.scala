@@ -8,21 +8,30 @@ final case class LLMInferenceResponseRaw(
     response: String
 ) derives JsonDecoder
 
-final case class LLMResponse(
+final case class LLMResponseAddItem(
     itemName: String,
     category: String,
     subCategory: String,
     colors: List[String] = List.empty,
     style: List[String] = List.empty,
+    season: List[String] = List.empty, 
+    warmth: String,
+    pattern: String,
     fabric: String,
     activities: List[String] = List.empty,
-    season: List[String] = List.empty,
-    warmth: String,
     description: String,
-    pattern: String
+    suggestedPairingColors: List[String] = List.empty
+) derives JsonDecoder, JsonEncoder
+
+final case class LLMResponseSearchOutfits(
+    style: List[String] = List.empty,
+    season: List[String] = List.empty,
+    forcedItems: List[String] = List.empty,
+    location: Option[String] = None
 ) derives JsonDecoder, JsonEncoder
 
 
 final case class LLMInferenceResponse(
-    response: LLMResponse
+    responseAddItem: Option[LLMResponseAddItem] = None,
+    responseSearchOutfits: Option[LLMResponseSearchOutfits] = None
 ) derives JsonEncoder

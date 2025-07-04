@@ -1,26 +1,15 @@
 package business
 import business.GetPresignedURLSvcFlow.*
-import core.{
-  GetPresignedURLRequest,
-  GetPresignedURLResponse,
-  PresignedUrlType,
-  PresignedURLs
-}
+import core.*
 import persistence.models.UserClosetModel
-import software.amazon.awssdk.services.s3.model.{
-  GetObjectRequest,
-  PutObjectRequest
-}
+import software.amazon.awssdk.services.s3.model.{GetObjectRequest, PutObjectRequest}
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
-import software.amazon.awssdk.services.s3.presigner.model.{
-  GetObjectPresignRequest,
-  PutObjectPresignRequest
-}
+import software.amazon.awssdk.services.s3.presigner.model.{GetObjectPresignRequest, PutObjectPresignRequest}
+import web.layers.ServiceLayers.ExecutorAndPresignerType
 import zio.*
 import zio.dynamodb.{DynamoDBExecutor, KeyConditionExpr}
 import java.util.UUID
 import scala.util.chaining.*
-import web.layers.ServiceLayers.ExecutorAndPresignerType
 
 class GetPresignedURLSvcFlow(cfgCtx: CfgCtx)
     extends (
@@ -75,29 +64,6 @@ class GetPresignedURLSvcFlow(cfgCtx: CfgCtx)
       }
     )
   }
-
-  // def constructPresignedUrl(
-  //     presigner: S3Presigner,
-  //     userId: String,
-  //     result: UserClosetModel,
-  //     urlType: PresignedUrlType,
-  //     closetItemKeys: List[String]
-  // ): PresignedURLs = {
-  //   val imageIdentifier = UUID.randomUUID().toString().replace("-", "")
-  //   {
-  //     urlType match {
-  //       case PresignedUrlType.PUT =>
-  //         generatePutPresignedUrl(presigner, result, imageIdentifier)
-  //       case PresignedUrlType.GET =>
-  //         generateGetPresignedUrl(presigner, result, closetItemKeys)
-  //     }
-  //   }.pipe(presignedUrl =>
-  //     PresignedURLs(
-  //       imageIdentifier,
-  //       presignedUrl
-  //     )
-  //   )
-  // }
 
   private def generatePutPresignedUrls(
       presigner: S3Presigner,
