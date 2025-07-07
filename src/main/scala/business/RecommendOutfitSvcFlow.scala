@@ -9,6 +9,10 @@ import core.LLMInferenceResponse
 import web.layers.ServiceLayers.ExecutorAndPresignerType
 import core.UserCloset
 import persistence.models.UserClosetModel.userId
+import persistence.models.ClosetItemModel
+import scala.collection.View.Filter
+import core.OutfitTemplates.BasicTemplate
+import core.OutfitTemplates.DressTemplate
 
 class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
 
@@ -16,32 +20,132 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
 
   def apply(
       request: SearchRequest
-  ): ZIO[ExecutorAndPresignerType & Client, Throwable, SearchResponse] = {
-    getUserCloset(request.userId).zipWithPar(
-      llmSearchOutfits(request.searchCriteria)
-    ) { (userClosetOpt, searchCriteria) =>
-      val searchStyles =
-        searchCriteria.responseSearchOutfits.map(_.style).toList.flatten
-      val closetItems = userClosetOpt.toList.flatMap(_.closetItems)
+  ): RIO[ExecutorAndPresignerType & Client, SearchResponse] = {
 
-      val filteredClosetItems = closetItems
-        .withFilter(item =>
+    for {
+      sortedClosetItmes <- sortItemsByCategory(request)
+      createdOutfits <- createOutfits(sortedClosetItmes)
+    } yield createdOutfits
+  }
+
+  private def sortItemsByCategory(
+      request: SearchRequest
+  ): RIO[ExecutorAndPresignerType & Client, Map[FilterType, List[
+    ClosetItemModel
+  ]]] = {
+    for {
+      (userClosetOpt, searchCriteria) <- getUserCloset(request.userId)
+        .zipWithPar(llmSearchOutfits(request.searchCriteria)) {
+          (userClosetOpt, searchCriteria) => (userClosetOpt, searchCriteria)
+        }
+
+      searchStyles = searchCriteria.responseSearchOutfits
+        .map(_.style)
+        .toList
+        .flatten
+      filteredClosetItems = userClosetOpt.toList
+        .flatMap(_.closetItems)
+        .filter(item =>
           item.itemMetadata.toList
             .flatMap(_.responseAddItem.toList.flatMap(_.style))
             .exists(searchStyles.contains)
         )
-        .map(identity)
-      print(s"Hey ${filteredClosetItems}")
+
+      resultMap <- ZIO
+        .collectAllPar(
+          CATEGORIES.map(category =>
+            ZIO.attempt(filterItemsByCategory(filteredClosetItems, category))
+          )
+        )
+        .map(_.toMap)
+        .withParallelism(5)
+    } yield resultMap
+  }
+
+  private def createOutfits(
+      sortedClosetItmes: Map[FilterType, List[ClosetItemModel]]
+  ): Task[SearchResponse] = {
+    createBasicOutfits(
+      sortedClosetItmes(FilterType.TOP),
+      sortedClosetItmes(FilterType.BOTTOM),
+      sortedClosetItmes(FilterType.SHOES)
+    ).zipWithPar(
+      createDressOutfits(
+        sortedClosetItmes(FilterType.DRESS),
+        sortedClosetItmes(FilterType.SHOES)
+      )
+    ) { (basicOutfits, dressOutfits) =>
       SearchResponse(
-        userId = request.userId,
-        results = filteredClosetItems.flatMap(_.itemName)
+        basicOutfits = basicOutfits,
+        dressOutfits = dressOutfits
       )
     }
+  }
+
+  private def filterItemsByCategory(
+      filteredClosetItems: List[ClosetItemModel],
+      filterType: FilterType
+  ): (FilterType, List[ClosetItemModel]) = {
+
+    filterType ->
+      filteredClosetItems
+        .withFilter(item =>
+          item.itemMetadata
+            .flatMap(_.responseAddItem.map(_.category))
+            .contains(filterType.value)
+        )
+        .map(identity)
+  }
+
+  private def createBasicOutfits(
+      tops: List[ClosetItemModel],
+      bottoms: List[ClosetItemModel],
+      shoes: List[ClosetItemModel]
+  ): Task[List[BasicTemplate]] = {
+
+    ZIO.attempt(
+      tops.flatMap(top =>
+        bottoms.flatMap(bottom =>
+          shoes.map(shoe =>
+            BasicTemplate(
+              top = top,
+              bottom = bottom,
+              shoes = shoe
+            )
+          )
+        )
+      )
+    )
+  }
+
+  private def createDressOutfits(
+      dresses: List[ClosetItemModel],
+      shoes: List[ClosetItemModel]
+  ): Task[List[DressTemplate]] = {
+    ZIO.attempt(
+      dresses.flatMap(dress =>
+        shoes.map(shoe =>
+          DressTemplate(
+            dress = dress,
+            shoes = shoe
+          )
+        )
+      )
+    )
   }
 
 }
 
 object RecommendOutfitSvcFlow {
+  enum FilterType(val value: String) {
+    case TOP extends FilterType("Top")
+    case BOTTOM extends FilterType("Bottom")
+    case DRESS extends FilterType("Dress")
+    case SHOES extends FilterType("Shoes")
+    case OUTERWEAR extends FilterType("Outerwear")
+  }
+  val CATEGORIES = FilterType.values.toSet
+
   case class CfgCtx(
       llmSearchOutfits: String => RIO[Client, LLMInferenceResponse],
       getUserCloset: String => URIO[ExecutorAndPresignerType, Option[

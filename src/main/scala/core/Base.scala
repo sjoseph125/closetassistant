@@ -5,7 +5,11 @@ import zio.json.{JsonEncoder, JsonDecoder, DeriveJsonDecoder}
 
 sealed trait BaseRequest
 
-trait BaseRespose
+abstract class BaseRespose (
+    val a: String,
+    val b: String
+)
+
 
 // object BaseRequest {
 

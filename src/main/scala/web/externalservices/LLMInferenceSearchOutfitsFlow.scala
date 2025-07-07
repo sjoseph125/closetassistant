@@ -52,7 +52,9 @@ class LLMInferenceSearchOutfitsFlow(cfgCtx: CfgCtx) {
             LLMInferenceResponse(
               responseSearchOutfits = parsed.response
                 .fromJson[LLMResponseSearchOutfits] match {
-                case Right(llmResponse) => Some(llmResponse)
+                case Right(llmResponse) => 
+                  println(s"Parsed LLMResponseSearchOutfits: $llmResponse")
+                  Some(llmResponse)
                 case Left(error) =>
                   println(s"Failed with $error")
                   throw new Exception(

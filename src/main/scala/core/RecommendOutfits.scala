@@ -1,6 +1,7 @@
 package core
 
 import zio.json.{JsonEncoder, JsonDecoder, DeriveJsonDecoder}
+import core.OutfitTemplates.{BasicTemplate, DressTemplate}
 
 final case class SearchRequest(
     userId: String,
@@ -8,8 +9,8 @@ final case class SearchRequest(
 ) derives JsonEncoder
 
 final case class SearchResponse(
-    userId: String,
-    results: List[String]
+    basicOutfits: List[BasicTemplate] = List.empty,
+    dressOutfits: List[DressTemplate] = List.empty
 ) derives JsonEncoder
 
 object SearchRequest {
