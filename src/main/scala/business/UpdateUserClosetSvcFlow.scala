@@ -125,7 +125,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
           ClosetItemModel(
             closetItemKey = key,
             itemType = llmResponse.get(key).flatMap(_.responseAddItem.map(_.category)),
-            itemMetadata = llmResponse.get(key)
+            itemMetadata = llmResponse.get(key).flatMap(_.responseAddItem)
           )
         )
       }
@@ -166,7 +166,7 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
         UserClosetModel.closetItemKeys.set(
           updatedItemKeys.distinct
         )
-      ).flatMap(_ => getUserCloset(userId))
+      ).flatMap(_ => getUserCloset(userId, false))
     )
 
 }
@@ -184,7 +184,7 @@ object UpdateUserClosetSvcFlow {
           PrimaryKeyExpr[UserClosetModel],
           Action[UserClosetModel]
       ) => ZIO[DynamoDBExecutor, DynamoDBError, Option[UserClosetModel]],
-      getUserCloset: String => URIO[ExecutorAndPresignerType, Option[
+      getUserCloset: (String, Boolean) => URIO[ExecutorAndPresignerType, Option[
         UserCloset
       ]],
       deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[

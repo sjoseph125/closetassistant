@@ -21,7 +21,9 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
   def apply(
       request: SearchRequest
   ): RIO[ExecutorAndPresignerType & Client, SearchResponse] = {
-
+    println(
+      s"Starting RecommendOutfitSvcFlow for user ${request.userId} with search criteria: ${request.searchCriteria}"
+    )
     for {
       sortedClosetItmes <- sortItemsByCategory(request)
       createdOutfits <- createOutfits(sortedClosetItmes)
@@ -34,20 +36,20 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
     ClosetItemModel
   ]]] = {
     for {
-      (userClosetOpt, searchCriteria) <- getUserCloset(request.userId)
+      (userClosetOpt, searchCriteria) <- getUserCloset(request.userId, true)
         .zipWithPar(llmSearchOutfits(request.searchCriteria)) {
           (userClosetOpt, searchCriteria) => (userClosetOpt, searchCriteria)
         }
-
+      _ = println(s"Search criteria: $searchCriteria")
       searchStyles = searchCriteria.responseSearchOutfits
         .map(_.style)
         .toList
         .flatten
+      _ = println(s"Search styles: $searchStyles")
       filteredClosetItems = userClosetOpt.toList
         .flatMap(_.closetItems)
         .filter(item =>
-          item.itemMetadata.toList
-            .flatMap(_.responseAddItem.toList.flatMap(_.style))
+          item.itemMetadata.toList.flatMap(_.style)
             .exists(searchStyles.contains)
         )
 
@@ -68,7 +70,8 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
     createBasicOutfits(
       sortedClosetItmes(FilterType.TOP),
       sortedClosetItmes(FilterType.BOTTOM),
-      sortedClosetItmes(FilterType.SHOES)
+      sortedClosetItmes(FilterType.SHOES),
+      sortedClosetItmes(FilterType.OUTERWEAR)
     ).zipWithPar(
       createDressOutfits(
         sortedClosetItmes(FilterType.DRESS),
@@ -91,7 +94,7 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
       filteredClosetItems
         .withFilter(item =>
           item.itemMetadata
-            .flatMap(_.responseAddItem.map(_.category))
+            .map(_.category)
             .contains(filterType.value)
         )
         .map(identity)
@@ -100,11 +103,14 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
   private def createBasicOutfits(
       tops: List[ClosetItemModel],
       bottoms: List[ClosetItemModel],
-      shoes: List[ClosetItemModel]
+      shoes: List[ClosetItemModel],
+      outerwear: List[ClosetItemModel]
   ): Task[List[BasicTemplate]] = {
-
-    ZIO.attempt(
-      tops.flatMap(top =>
+    println(
+      s"Creating basic outfits with tops: ${tops.map(_.closetItemKey)}, bottoms: ${bottoms.map(_.closetItemKey)}, shoes: ${shoes.map(_.closetItemKey)}"
+    )
+    ZIO.attempt{
+      val outfits = tops.flatMap(top =>
         bottoms.flatMap(bottom =>
           shoes.map(shoe =>
             BasicTemplate(
@@ -115,7 +121,16 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
           )
         )
       )
-    )
+      if (outerwear.isEmpty) {
+        outfits
+      } else {
+        outerwear.flatMap(outer =>
+          outfits.map(outfit =>
+            outfit.copy(outerwear = Some(outer))
+          )
+        )
+      }
+  }
   }
 
   private def createDressOutfits(
@@ -148,7 +163,7 @@ object RecommendOutfitSvcFlow {
 
   case class CfgCtx(
       llmSearchOutfits: String => RIO[Client, LLMInferenceResponse],
-      getUserCloset: String => URIO[ExecutorAndPresignerType, Option[
+      getUserCloset: (String, Boolean) => URIO[ExecutorAndPresignerType, Option[
         UserCloset
       ]]
   )

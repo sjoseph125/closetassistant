@@ -7,6 +7,7 @@ object OutfitTemplates {
 
 
   final case class BasicTemplate(
+    outerwear: Option[ClosetItemModel] = None,
     top: ClosetItemModel,
     bottom: ClosetItemModel,
     shoes: ClosetItemModel

@@ -19,15 +19,14 @@ import zio.aws.s3.S3
 
 trait Flows extends Config {
 
-  lazy val getUserCloset
-      : String => URIO[ExecutorAndPresignerType, Option[UserCloset]] = userId =>
+  lazy val getUserCloset: (String, Boolean) => URIO[ExecutorAndPresignerType, Option[UserCloset]] = (userId, includeMetaData) =>
     new GetUserClosetSvcFlow(
       GetUserClosetSvcFlow.CfgCtx(
         getClosetData = getClosetData,
         getClosetItem = getClosetItem,
         getPresignedUrls = getPresignedUrls
       )
-    )(userId)
+    )(userId, includeMetaData)
 
   lazy val updateUserCloset
       : UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndPresignerType, Option[

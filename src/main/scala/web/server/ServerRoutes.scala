@@ -23,7 +23,7 @@ object ServerRoutes extends Flows {
     Routes(
       GET / Root -> handler(Response.text(s"Hello")),
       GET / "v1" / "closet" / string("userId") -> handler {
-        (userId: String, _: Request) => getUserCloset(userId).toHttpResponse
+        (userId: String, _: Request) => getUserCloset(userId, false).toHttpResponse
       },
       GET / "v1" / "upload" / string("userId") -> handler {
         (userId: String,  req: Request) =>

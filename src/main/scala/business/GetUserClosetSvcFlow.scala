@@ -17,10 +17,11 @@ import core.GetPresignedURLResponse
 import core.PresignedUrlType
 
 class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
-    extends (String => URIO[ExecutorAndPresignerType, Option[UserCloset]]) {
+    extends ((String, Boolean) => URIO[ExecutorAndPresignerType, Option[UserCloset]]) {
   import cfgCtx._
   override def apply(
-      userId: String
+      userId: String,
+      includeMetaData: Boolean = false
   ): URIO[ExecutorAndPresignerType, Option[UserCloset]] = {
     println("Starting GetUserClosetSvcFlow")
 
@@ -66,8 +67,8 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
                           .withFilter(_.imageIdentifier == item.closetItemKey)
                           .map(_.presignedUrl)
                           .headOption,
-                        // itemMetadata = None,
-                        itemName = item.itemMetadata.flatMap(_.responseAddItem.map(_.itemName))
+                        itemMetadata = if(includeMetaData) item.itemMetadata else None,
+                        itemName = item.itemMetadata.map(_.itemName)
                       )
                     )
                   )
