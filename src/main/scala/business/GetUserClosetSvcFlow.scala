@@ -15,9 +15,11 @@ import core.GetPresignedURLRequest
 import web.layers.ServiceLayers.ExecutorAndPresignerType
 import core.GetPresignedURLResponse
 import core.PresignedUrlType
+import java.util.UUID
+import web.layers.ServiceLayers.ClientAndS3
 
 class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
-    extends ((String, Boolean) => URIO[ExecutorAndPresignerType, Option[UserCloset]]) {
+    extends ((String, Boolean) => RIO[ExecutorAndPresignerType, Option[UserCloset]]) {
   import cfgCtx._
   override def apply(
       userId: String,
@@ -38,9 +40,19 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
 
           case None =>
             println(s"No closet found for user $userId")
-            ZIO.succeed(
-              None
-            )
+            createNewCloset(userId)
+              .fold(
+                err => {
+                  println(s"Error creating new closet for user $userId: ${err.getMessage}")
+                  throw new Exception("Failed to create new closet")
+                },
+                closetOpt => Some(
+                  UserCloset(
+                    userId = userId,
+                    numOfItems = 0
+                  )
+                )
+              )
 
           case Some(_) =>
             println(
@@ -92,9 +104,7 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
   private def getClosetItems(
       closetItemKeys: List[String]
   ): ZIO[DynamoDBExecutor, DynamoDBError, List[ClosetItemModel]] =
-    val closetItemsBatch: ZIO[DynamoDBExecutor, DynamoDBError, List[
-      Either[ItemError, ClosetItemModel]
-    ]] =
+    val closetItemsBatch =
       DynamoDBQuery
         .forEach(closetItemKeys) { key =>
           ZIO.logInfo(s"Processing closet item key: $key")
@@ -112,6 +122,16 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
           None
       }
     }
+
+  private def createNewCloset(userId: String): RIO[DynamoDBExecutor, Option[UserClosetModel]] = {
+    println(s"Creating new closet for user ${userId}")
+    addNewCloset(
+      UserClosetModel(
+        userId = userId,
+        imageRepoId = UUID.randomUUID().toString
+      )
+    ).execute
+  }
 }
 
 object GetUserClosetSvcFlow {
@@ -127,6 +147,7 @@ object GetUserClosetSvcFlow {
       getPresignedUrls: GetPresignedURLRequest => RIO[
         ExecutorAndPresignerType,
         GetPresignedURLResponse
-      ]
+      ],
+      addNewCloset: UserClosetModel => DynamoDBQuery[UserClosetModel, Option[UserClosetModel]]
   )
 }

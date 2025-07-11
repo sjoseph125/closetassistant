@@ -19,14 +19,19 @@ import zio.aws.s3.S3
 
 trait Flows extends Config {
 
-  lazy val getUserCloset: (String, Boolean) => URIO[ExecutorAndPresignerType, Option[UserCloset]] = (userId, includeMetaData) =>
-    new GetUserClosetSvcFlow(
-      GetUserClosetSvcFlow.CfgCtx(
-        getClosetData = getClosetData,
-        getClosetItem = getClosetItem,
-        getPresignedUrls = getPresignedUrls
-      )
-    )(userId, includeMetaData)
+  lazy val getUserCloset: (
+      String,
+      Boolean
+  ) => URIO[ExecutorAndPresignerType, Option[UserCloset]] =
+    (userId, includeMetaData) =>
+      new GetUserClosetSvcFlow(
+        GetUserClosetSvcFlow.CfgCtx(
+          getClosetData = getClosetData,
+          getClosetItem = getClosetItem,
+          getPresignedUrls = getPresignedUrls,
+          addNewCloset = addNewCloset
+        )
+      )(userId, includeMetaData)
 
   lazy val updateUserCloset
       : UpdateUserCloset => RIO[ClientAndS3 & ExecutorAndPresignerType, Option[
@@ -39,7 +44,8 @@ trait Flows extends Config {
         updateClosetData = updateClosetData,
         getUserCloset = getUserCloset,
         deleteClosetItem = deleteClosetItem,
-        llmInferenceFlow = llmPostRequestAddItem
+        llmInferenceFlow = llmPostRequestAddItem,
+        addNewCloset = addNewCloset
       )
     )(updateUserCloset)
 
@@ -54,11 +60,14 @@ trait Flows extends Config {
       )
     )(request)
 
-  lazy val recommendOutfit: SearchRequest => RIO[ExecutorAndPresignerType & Client, SearchResponse] = request =>
+  lazy val recommendOutfit: SearchRequest => RIO[
+    ExecutorAndPresignerType & Client,
+    SearchResponse
+  ] = request =>
     new RecommendOutfitSvcFlow(
       RecommendOutfitSvcFlow.CfgCtx(
         llmSearchOutfits = llmSearchOutfits,
-        getUserCloset = getUserCloset,
+        getUserCloset = getUserCloset
       )
     )(request)
 }
@@ -90,6 +99,10 @@ object DBFlows extends Config {
       ]] =
     item => DynamoDBQueries.put[ClosetItemModel](closetItemTableName, item)
 
+  lazy val addNewCloset
+      : UserClosetModel => DynamoDBQuery[UserClosetModel, Option[UserClosetModel]] = closet =>
+    DynamoDBQueries.put[UserClosetModel](closetDataTableName, closet)
+
   lazy val deleteClosetItem: PrimaryKeyExpr[ClosetItemModel] => DynamoDBQuery[
     ClosetItemModel,
     Option[ClosetItemModel]
@@ -111,14 +124,15 @@ object ExternalSvcFlows extends Config {
       )
     ).postRequest(request)
 
-  lazy val llmSearchOutfits: String => RIO[Client, LLMInferenceResponse] = request =>
-    new LLMInferenceSearchOutfitsFlow(
-      LLMInferenceSearchOutfitsFlow.CfgCtx(
-        apiUrl = llmApiUrl,
-        model = model,
-        prompt = userSearchPrompt
-      )
-    )(request)
+  lazy val llmSearchOutfits: String => RIO[Client, LLMInferenceResponse] =
+    request =>
+      new LLMInferenceSearchOutfitsFlow(
+        LLMInferenceSearchOutfitsFlow.CfgCtx(
+          apiUrl = llmApiUrl,
+          model = model,
+          prompt = userSearchPrompt
+        )
+      )(request)
 
   lazy val s3Download: String => URIO[S3, Chunk[Byte]] = imageIdentifier =>
     new S3DownloadFlow(

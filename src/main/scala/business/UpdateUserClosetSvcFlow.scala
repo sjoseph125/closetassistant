@@ -16,6 +16,9 @@ import zio.http.{Response, Client}
 import persistence.queries.DynamoDBQueries.update
 import persistence.models.ClosetItemModel.itemMetadata
 import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import java.util.UUID
+import zio.http.Body
+import zio.http.ZClient
 
 class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
     extends (
@@ -44,9 +47,8 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
         result.headOption match {
           case None =>
             println(s"No closet found for user $userId")
-            ZIO.fail(
-              new Exception("No closet found")
-            )
+            createNewCloset(updateUserCloset)
+
           case Some(result) =>
             println(
               s"Found closet for user $userId with ${result.closetItemKeys.size} items"
@@ -60,6 +62,23 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
             )
         }
     )
+  }
+
+  private def createNewCloset(updateUserCloset: UpdateUserCloset): RIO[ClientAndS3 & ExecutorAndPresignerType, Option[UserCloset]] = {
+    println(s"Creating new closet for user ${updateUserCloset.userId}")
+    addNewCloset(
+      UserClosetModel(
+        userId = updateUserCloset.userId,
+        closetItemKeys = updateUserCloset.closetItemKeys,
+        imageRepoId = UUID.randomUUID().toString
+      )
+    ).execute
+      .flatMap(newUserCloset => detemineAddorDelete(
+        updateUserCloset,
+        newUserCloset.toList.flatMap(_.closetItemKeys),
+        updateUserCloset.closetItemKeys,
+        newUserCloset.map(_.imageRepoId).getOrElse(UUID.randomUUID().toString)
+      ))
   }
 
   private def detemineAddorDelete(
@@ -118,7 +137,6 @@ class UpdateUserClosetSvcFlow(cfgCtx: CfgCtx)
       closetItemKeys: List[String],
       llmResponse: Map[String, LLMInferenceResponse]
   ): ZIO[DynamoDBExecutor, DynamoDBError, List[Option[ClosetItemModel]]] =
-    println(closetItemKeys)
     DynamoDBQuery
       .forEach(closetItemKeys) { key =>
         addClosetItem(
@@ -180,6 +198,7 @@ object UpdateUserClosetSvcFlow {
       addClosetItem: ClosetItemModel => DynamoDBQuery[ClosetItemModel, Option[
         ClosetItemModel
       ]],
+      addNewCloset: UserClosetModel => DynamoDBQuery[UserClosetModel, Option[UserClosetModel]],
       updateClosetData: (
           PrimaryKeyExpr[UserClosetModel],
           Action[UserClosetModel]
