@@ -7,7 +7,6 @@ object OutfitTemplates {
 
 
   final case class BasicTemplate(
-    outerwear: Option[ClosetItemModel] = None,
     top: ClosetItemModel,
     bottom: ClosetItemModel,
     shoes: ClosetItemModel
@@ -23,5 +22,5 @@ object OutfitTemplates {
     bottom: ClosetItemModel,
     shoes: ClosetItemModel,
     outerwear: ClosetItemModel
-  )
+  ) derives JsonEncoder
 }

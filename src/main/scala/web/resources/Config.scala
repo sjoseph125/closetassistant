@@ -8,6 +8,8 @@ abstract class Config {
   lazy val bucketName = "closet-assistant-image-repository"
   lazy val llmApiUrl =
     "https://eoao8so1ckzinx-11434.proxy.runpod.net/api/generate"
+  lazy val weatherApiUrl = "http://api.weatherapi.com/v1/current.json"
+  lazy val weatherApiKey = "b34866764af4415fb30224545251107"
   lazy val model = "gemma3:27b"
   lazy val itemMetadataPrompt = """
     Your Role: You are an expert fashion data analyst and stylist. Your task is to analyze images of clothing items and generate a rich, structured metadata profile for each one. This data will power a smart virtual closet and outfit recommendation engine. Accuracy and consistency are paramount.

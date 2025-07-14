@@ -12,11 +12,12 @@ final case class ClosetItemModel(
     itemType: Option[String] = None,
     presignedUrl: Option[String] = None,
     itemMetadata: Option[LLMResponseAddItem] = None,
-    itemName: Option[String] = None
+    itemName: Option[String] = None,
+    description: Option[String] = None
 ) derives JsonEncoder
 
 object ClosetItemModel {
-    implicit val schema: Schema.CaseClass5[String, Option[String], Option[String], Option[LLMResponseAddItem], Option[String], ClosetItemModel] = zio.schema.DeriveSchema.gen[ClosetItemModel]
-    val (closetItemKey, itemType, presignedUrl, itemMetadata, itemName) = ProjectionExpression.accessors[ClosetItemModel]
+    implicit val schema: Schema.CaseClass6[String, Option[String], Option[String], Option[LLMResponseAddItem], Option[String], Option[String], ClosetItemModel] = zio.schema.DeriveSchema.gen[ClosetItemModel]
+    val (closetItemKey, itemType, presignedUrl, itemMetadata, itemName, description) = ProjectionExpression.accessors[ClosetItemModel]
 }
 

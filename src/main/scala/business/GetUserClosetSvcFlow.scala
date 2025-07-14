@@ -80,7 +80,8 @@ class GetUserClosetSvcFlow(cfgCtx: CfgCtx)
                           .map(_.presignedUrl)
                           .headOption,
                         itemMetadata = if(includeMetaData) item.itemMetadata else None,
-                        itemName = item.itemMetadata.map(_.itemName)
+                        itemName = item.itemMetadata.map(_.itemName),
+                        description = item.itemMetadata.map(_.description)
                       )
                     )
                   )

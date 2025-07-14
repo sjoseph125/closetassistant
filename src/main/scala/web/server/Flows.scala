@@ -67,7 +67,8 @@ trait Flows extends Config {
     new RecommendOutfitSvcFlow(
       RecommendOutfitSvcFlow.CfgCtx(
         llmSearchOutfits = llmSearchOutfits,
-        getUserCloset = getUserCloset
+        getUserCloset = getUserCloset,
+        weatherInfoFlow = weatherInfoFlow
       )
     )(request)
 }
@@ -140,4 +141,14 @@ object ExternalSvcFlows extends Config {
         bucketName = bucketName
       )
     )(imageIdentifier)
+
+  lazy val weatherInfoFlow: (
+      Location
+  ) => RIO[Client, WeatherInfoResponse] = userLocation =>
+    new WeatherInfoFlow(
+      WeatherInfoFlow.CfgCtx(
+        apiUrl = weatherApiUrl,
+        apiKey = weatherApiKey
+      )
+    )(userLocation)
 }
