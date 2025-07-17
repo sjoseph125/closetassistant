@@ -62,9 +62,6 @@ Now, analyze the given image and provide the JSON output."""
     """**Your Role:** You are an expert Natural Language Understanding (NLU) system. Your sole purpose is to deconstruct a user's request for an outfit recommendation and convert it into a structured JSON object. You must infer context from the user's language and the provided environmental details.
 
 **Contextual Information:**
-* **Current Date & Time:** Thursday, July 3, 2025, 12:56 PM EDT
-* **Current Location:** Takoma Park, Maryland, United States
-
 **Your Task:**
 Analyze the user's request below. Based on the request and the contextual information, generate a single, valid JSON object that captures all relevant parameters for a database query.
 * **User Request:** {USER_REQUEST}
@@ -80,37 +77,37 @@ Your output MUST be a single, valid JSON object and nothing else. Do not add exp
       - allowedValues: ["Spring", "Summer", "Fall", "Winter", "All-Season"]
 3. "forcedItems" (array of strings)
       - discription: "A list of specific items the user insists on wearing. Extract descriptions like 'my red dress' or 'new leather jacket'."
-4. "location" (string)
-      - discription: "The city, state, or country mentioned for the event or trip. Defaults to the current location if not specified but relevant."
+4. "location" (array of string)
+      - discription: "The geolocation of the city, state, or country mentioned for the event or trip. The format should be ["Lattitude", "Longitude"]. Defaults to the ["{LATTITUDE}", "{LONGITUDE}"] ONLY IF NO location is specified in the user's request."
 
 ---
 **Examples:**
 
-**User Request 1:** "What can I wear for a casual brunch this spring?"
+**User Request 1:** "What can I wear for a casual brunch this spring in Miami?"
 **Your Output 1:**
 {
   "style": ["Casual", "Evening"],
   "season": ["Spring"],
   "forcedItems": null,
-  "location": "Takoma Park, Maryland, United States"
+  "location": ["25.7617","-80.1918"]
 }
 
-**User Request 2:** "It's supposed to be cold and rainy tomorrow, what should I wear to work?"
+**User Request 2:** "It's supposed to be cold and rainy tomorrow in London, what should I wear to work?"
 **Your Output 2:**
 {
   "style": ["Business Casual"],
   "season": ["Fall", "Winter"],
   "forcedItems": null,
-  "location": "Takoma Park, Maryland, United States"
+  "location": ["51.5074","-0.1278"]
 }
 
-**User Request 3:** "I need help figuring out what to wear with my new black boots for a night out."
+**User Request 3:** "I need help figuring out what to wear with my new black boots for a night out in Takoma Park, Maryland."
 **Your Output 3:**
 {
   "style": ["Evening", "Trendy"],
   "season": null,
   "forcedItems": ["new black boots"],
-  "location": "Takoma Park, Maryland, United States"
+  "location": ["38.9778","-77.0147"]
 }
 
 **User Request 4:** "I'm packing for a trip to Miami next week. I need outfits for the beach and for some nice dinners."
@@ -119,7 +116,7 @@ Your output MUST be a single, valid JSON object and nothing else. Do not add exp
   "style": ["Sporty", "Evening", "Formal"],
   "season": ["Summer"],
   "forcedItems": null,
-  "location": "Miami"
+  "location": ["25.7617","-80.1918"]
 }
 
 ---

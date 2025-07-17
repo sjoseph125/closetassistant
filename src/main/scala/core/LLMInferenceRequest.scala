@@ -82,6 +82,6 @@ object LLMInferenceRequestSearchOutfits {
       style: LLMResponsePropertyType = LLMResponsePropertyType("array"),
       season: LLMResponsePropertyType = LLMResponsePropertyType("array"),
       forcedItems: LLMResponsePropertyType = LLMResponsePropertyType("array"),
-      location: LLMResponsePropertyType = LLMResponsePropertyType("string")
+      location: LLMResponsePropertyType = LLMResponsePropertyType("array")
   ) derives JsonEncoder
 }

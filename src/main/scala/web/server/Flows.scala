@@ -125,15 +125,15 @@ object ExternalSvcFlows extends Config {
       )
     ).postRequest(request)
 
-  lazy val llmSearchOutfits: String => RIO[Client, LLMInferenceResponse] =
-    request =>
+  lazy val llmSearchOutfits: (String, Option[Location]) => RIO[Client, LLMInferenceResponse] =
+    (request, userLocation) =>
       new LLMInferenceSearchOutfitsFlow(
         LLMInferenceSearchOutfitsFlow.CfgCtx(
           apiUrl = llmApiUrl,
           model = model,
           prompt = userSearchPrompt
         )
-      )(request)
+      )(request, userLocation)
 
   lazy val s3Download: String => URIO[S3, Chunk[Byte]] = imageIdentifier =>
     new S3DownloadFlow(

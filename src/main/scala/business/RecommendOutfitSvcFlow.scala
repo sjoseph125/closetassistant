@@ -18,27 +18,48 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
     println(
       s"Starting RecommendOutfitSvcFlow for user ${request.userId} with search criteria: ${request.searchCriteria}"
     )
-    println(s"Location: ${request.userLocation}")
     for {
-      weatherInfoOpt <- request.userLocation match {
-        case Some(location) => weatherInfoFlow(location).option
-        case None           => ZIO.succeed(None)
+      searchCriteria <- llmSearchOutfits(
+        request.searchCriteria,
+        request.userLocation
+      )
+      sortedClosetItemsFiber <- sortItemsByCategory(
+        request.userId,
+        searchCriteria
+      ).fork
+      userLocationFromSearch = searchCriteria.responseSearchOutfits.map(
+        _.location
+      )
+      latitudeOpt = userLocationFromSearch.flatMap(_.headOption)
+      longitudeOpt = userLocationFromSearch.flatMap(_.tail.headOption)
+      weatherInfoOpt <- (
+        userLocationFromSearch,
+        request.userLocation,
+        latitudeOpt,
+        longitudeOpt
+      ) match {
+        case (Some(location), _, Some(latitude), Some(longitude)) =>
+          weatherInfoFlow(Location(latitude.toDouble, longitude.toDouble))
+            .map(Some(_))
+        case (None, Some(currentUserLocation), _, _) =>
+          weatherInfoFlow(currentUserLocation).map(Some(_))
+        case _ => ZIO.succeed(None)
       }
-      sortedClosetItmes <- sortItemsByCategory(request)
-      createdOutfits <- createOutfits(sortedClosetItmes, weatherInfoOpt)
+
+      createdOutfits <- sortedClosetItemsFiber.join.flatMap(sortedClosetItems =>
+        createOutfits(sortedClosetItems, weatherInfoOpt)
+      )
     } yield createdOutfits
   }
 
   private def sortItemsByCategory(
-      request: SearchRequest
+      userId: String,
+      searchCriteria: LLMInferenceResponse
   ): RIO[ExecutorAndPresignerType & Client, Map[FilterType, List[
     ClosetItemModel
   ]]] = {
     for {
-      (userClosetOpt, searchCriteria) <- getUserCloset(request.userId, true)
-        .zipWithPar(llmSearchOutfits(request.searchCriteria)) {
-          (userClosetOpt, searchCriteria) => (userClosetOpt, searchCriteria)
-        }
+      userClosetOpt <- getUserCloset(userId, true)
       searchStyles = searchCriteria.responseSearchOutfits
         .map(_.style)
         .toList
@@ -66,7 +87,6 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
       sortedClosetItmes: Map[FilterType, List[ClosetItemModel]],
       weatherInfoOpt: Option[WeatherInfoResponse]
   ): Task[SearchResponse] = {
-
     for {
       basicFiber <- createBasicOutfits(
         sortedClosetItmes(FilterType.TOP),
@@ -87,12 +107,13 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
       basicOutfits <- basicFiber.join
       dressOutfits <- dressFiber.join
       layeredOutfits <- layeredFiber.join
-      filteredByWeather = filterByWeather(
+      filteredByWeather <- filterByWeather(
         basicOutfits,
         dressOutfits,
         layeredOutfits,
         weatherInfoOpt
       )
+
     } yield filteredByWeather
   }
 
@@ -179,24 +200,59 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
       dressOutfits: List[DressTemplate],
       layeredOutfits: List[LayeredTemplate],
       weatherInfoOpt: Option[WeatherInfoResponse]
-  ) = {
+  ): ZIO[Any, Throwable, SearchResponse] = {
     weatherInfoOpt match {
       case Some(weatherInfo) => {
-        val temp: Inclusive = math.round(weatherInfo.current.temp_f) match {
-          case temp if 80 <= temp              => (5 to 15)
-          case temp if 70 <= temp && temp < 80 => (10 to 15)
-          case temp if 60 <= temp && temp < 70 => (15 to 20)
-          case _                              => (25 to 30)
-        }
-        val filteredBasic =
-          basicOutfits.filter(bt => temp.contains(calculateTotalWarmth(bt)))
-        val filteredDress =
-          dressOutfits.filter(dt => temp.contains(calculateTotalWarmth(dt)))
-        val filteredLayered =
-          layeredOutfits.filter(lt => temp.contains(calculateTotalWarmth(lt)))
-        SearchResponse(filteredBasic, filteredDress, filteredLayered)
+        val temp: Inclusive = getCurrentTemperature(weatherInfo)
+        println(s"Current temperature range: $temp")
+        val filteredBasicFiber = ZIO.attempt {
+          basicOutfits.withFilter(bt => temp.contains(calculateTotalWarmth(bt))).map(bt =>
+            bt.copy(
+              top = bt.top.copy(itemMetadata = None),
+              bottom = bt.bottom.copy(itemMetadata = None),
+              shoes = bt.shoes.copy(itemMetadata = None)
+            )
+          )
+        }.fork
+
+        val filteredDressFiber = ZIO.attempt {
+          dressOutfits.withFilter(dt => temp.contains(calculateTotalWarmth(dt))).map(dt =>
+            dt.copy(
+              dress = dt.dress.copy(itemMetadata = None),
+              shoes = dt.shoes.copy(itemMetadata = None)
+            )
+          )
+        }.fork
+
+        val filteredLayeredFiber = ZIO.attempt {
+          layeredOutfits.withFilter(lt => temp.contains(calculateTotalWarmth(lt))).map(lt =>
+            lt.copy(
+              top = lt.top.copy(itemMetadata = None),
+              bottom = lt.bottom.copy(itemMetadata = None),
+              shoes = lt.shoes.copy(itemMetadata = None),
+              outerwear = lt.outerwear.copy(itemMetadata = None)
+            )
+          )
+        }.fork
+
+        for {
+          filteredBasic <- filteredBasicFiber.flatMap(_.join)
+          filteredDress <- filteredDressFiber.flatMap(_.join)
+          filteredLayered <- filteredLayeredFiber.flatMap(_.join)
+        } yield SearchResponse(filteredBasic, filteredDress, filteredLayered)
       }
-      case None => SearchResponse(basicOutfits, dressOutfits, layeredOutfits)
+      case None => ZIO.succeed(SearchResponse(basicOutfits, dressOutfits, layeredOutfits))
+    }
+  }
+
+  private def getCurrentTemperature(
+      weatherInfoOpt: WeatherInfoResponse
+  ): Inclusive = {
+    math.round(weatherInfoOpt.current.temp_f) match {
+        case temp if 80 <= temp              => 5 to 15
+        case temp if 70 <= temp && temp < 80 => 10 to 15
+        case temp if 60 <= temp && temp < 70 => 15 to 20
+        case _                               => 25 to 30
     }
   }
 
@@ -221,7 +277,7 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
 
   private def findItemWarmth(
       item: ClosetItemModel
-  ): Int = item.itemMetadata.map(_.warmth.toInt).getOrElse(0)
+  ): Int = item.itemMetadata.map(_.warmth.replace(",", "").trim.toInt).getOrElse(0)
 
 }
 
@@ -236,7 +292,10 @@ object RecommendOutfitSvcFlow {
   val CATEGORIES = FilterType.values.toSet
 
   case class CfgCtx(
-      llmSearchOutfits: String => RIO[Client, LLMInferenceResponse],
+      llmSearchOutfits: (
+          String,
+          Option[Location]
+      ) => RIO[Client, LLMInferenceResponse],
       getUserCloset: (String, Boolean) => URIO[ExecutorAndPresignerType, Option[
         UserCloset
       ]],

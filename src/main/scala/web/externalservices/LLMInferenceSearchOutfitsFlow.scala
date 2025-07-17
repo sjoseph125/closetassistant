@@ -10,8 +10,20 @@ class LLMInferenceSearchOutfitsFlow(cfgCtx: CfgCtx) {
   import cfgCtx._
 
   def apply(
-      request: String
+      request: String,
+      userLocation: Option[Location] = None
   ): RIO[Client, LLMInferenceResponse] = {
+    val updatedPrompt = userLocation match
+      case None => prompt
+        .replace("{USER_REQUEST}", request)
+        .replace("{LATTITUDE}", "Not Provided")
+        .replace("{LONGITUDE}", "Not Provided")
+      case Some(value) =>
+        prompt
+          .replace("{USER_REQUEST}", request)
+          .replace("{LATTITUDE}", value.latitude.toString)
+          .replace("{LONGITUDE}", value.longitude.toString)
+    
     for {
       request <- ZIO.fromEither(URL.decode(apiUrl)).map { url =>
         Request
@@ -21,9 +33,8 @@ class LLMInferenceSearchOutfitsFlow(cfgCtx: CfgCtx) {
               LLMInferenceRequestSearchOutfits
                 .LLMInferenceRequest(
                   model = model,
-                  prompt = prompt.replace("{USER_REQUEST}", request)
-                )
-                .toJson
+                  prompt = updatedPrompt
+                ).toJson
             )
           )
           .addHeader(Header.ContentType(MediaType.application.json))

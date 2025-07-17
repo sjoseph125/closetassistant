@@ -27,7 +27,7 @@ final case class LLMResponseSearchOutfits(
     style: List[String] = List.empty,
     season: List[String] = List.empty,
     forcedItems: List[String] = List.empty,
-    location: Option[String] = None
+    location: List[String] = List.empty
 ) derives JsonDecoder, JsonEncoder
 
 
