@@ -78,7 +78,7 @@ Your output MUST be a single, valid JSON object and nothing else. Do not add exp
 3. "forcedItems" (array of strings)
       - discription: "A list of specific items the user insists on wearing. Extract descriptions like 'my red dress' or 'new leather jacket'."
 4. "location" (array of string)
-      - discription: "The geolocation of the city, state, or country mentioned for the event or trip. The format should be ["Lattitude", "Longitude"]. Defaults to the ["{LATTITUDE}", "{LONGITUDE}"] ONLY IF NO location is specified in the user's request."
+      - discription: "The geolocation of the city, state, or country mentioned for the event or trip. The format should be ["Lattitude", "Longitude"]. Defaults to the ["{LATTITUDE}", "{LONGITUDE}"] ONLY IF NO location is specified in the user's request. If the default location is "Not Provided", return an empty array instead."
 
 ---
 **Examples:**
