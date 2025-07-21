@@ -1,3 +1,4 @@
+enablePlugins(JavaAppPackaging, DockerPlugin)
 val scala3Version = "3.7.0"
 val zioAwsVersion = "7.28.29.13"
 
