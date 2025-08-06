@@ -1,22 +1,12 @@
 package web.server
-
 import zio._
 import zio.http._
 import zio.http.Method.*
-import business.GetUserClosetSvcFlow
-import web.layers.ServiceLayers.*
-import java.security.Provider.Service
-import zio.aws.dynamodb.DynamoDb
 import zio.json.*
-import zio.Exit.Success
-import zio.Exit.Failure
-import scala.util.chaining.*
-import zio.dynamodb.DynamoDBExecutor
-import core.UpdateUserCloset
-import software.amazon.awssdk.services.s3.presigner.S3Presigner
+import core.{UpdateUserCloset, SearchRequest, GetPresignedURLRequest}
 import utils.Extensions.*
-import core.SearchRequest
-import core.GetPresignedURLRequest
+import web.layers.ServiceLayers.ExecutorPresignerS3Type
+import scala.util.chaining.scalaUtilChainingOps
 
 object ServerRoutes extends Flows {
   val routes: Routes[ExecutorPresignerS3Type & Client, Nothing] =

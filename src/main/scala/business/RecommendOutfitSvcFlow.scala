@@ -14,7 +14,7 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
 
   def apply(
       request: SearchRequest
-  ): RIO[ExecutorAndPresignerType & Client, SearchResponse] = {
+  ): ZIO[ExecutorAndPresignerType & Client, Throwable, SearchResponse] = {
     println(
       s"Starting RecommendOutfitSvcFlow for user ${request.userId} with search criteria: ${request.searchCriteria}"
     )
@@ -27,7 +27,10 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
         request.userId,
         searchCriteria
       ).fork
-      userLocationFromSearch = searchCriteria.responseSearchOutfits.map(_.location).toList.flatten
+      userLocationFromSearch = searchCriteria.responseSearchOutfits
+        .map(_.location)
+        .toList
+        .flatten
       latitudeOpt = userLocationFromSearch.headOption
       longitudeOpt = userLocationFromSearch.lastOption
       seasons = searchCriteria.responseSearchOutfits.toList.flatMap(_.season)
@@ -38,12 +41,13 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
         longitudeOpt,
         seasons.nonEmpty
       ) match {
+        case (_, _, _, _, true) =>
+          ZIO.succeed(seasons.headOption)
         case (List(location), _, Some(latitude), Some(longitude), _) =>
-          weatherInfoFlow(Location(latitude.toDouble, longitude.toDouble)).map(Some(_))
+          weatherInfoFlow(Location(latitude.toDouble, longitude.toDouble))
+            .map(Some(_))
         case (Nil, Some(currentUserLocation), _, _, _) =>
           weatherInfoFlow(currentUserLocation).map(Some(_))
-        case (Nil, None, _, _, true) =>
-          ZIO.succeed(seasons.headOption)
         case _ =>
           ZIO.succeed(None)
       }
@@ -172,7 +176,6 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
     )
   }
 
-  // Add a stub implementation for createLayeredOutfits
   private def createLayeredOutfits(
       tops: List[ClosetItemModel],
       bottoms: List[ClosetItemModel],
@@ -204,14 +207,17 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
       weatherInfoOpt: Option[WeatherInfoResponse] | Option[String]
   ): ZIO[Any, Throwable, SearchResponse] = {
     val (temp, description) = weatherInfoOpt match {
-      case Some(weatherInfo: WeatherInfoResponse) => 
+      case Some(weatherInfo: WeatherInfoResponse) =>
         (getCurrentTemperature(weatherInfo), "Current temperature range")
       case Some(seasonString: String) =>
-        (getCurrentSeasonWarmth(Some(seasonString)), "Using provided season temperature range")
+        (
+          getCurrentSeasonWarmth(Some(seasonString)),
+          "Using provided season temperature range"
+        )
       case None =>
         (getCurrentSeasonWarmth(), "Using seasonal temperature range")
     }
-    
+
     println(s"$description: $temp")
     filterOutfitsByWarmth(basicOutfits, dressOutfits, layeredOutfits, temp)
   }
@@ -221,35 +227,41 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
       dressOutfits: List[DressTemplate],
       layeredOutfits: List[LayeredTemplate],
       tempRange: Inclusive
-  ): ZIO[Any, Throwable, SearchResponse] = {
+  ): Task[SearchResponse] = {
     val filteredBasicFiber = ZIO.attempt {
-      basicOutfits.withFilter(bt => tempRange.contains(calculateTotalWarmth(bt))).map(bt =>
-        bt.copy(
-          top = bt.top.copy(itemMetadata = None),
-          bottom = bt.bottom.copy(itemMetadata = None),
-          shoes = bt.shoes.copy(itemMetadata = None)
+      basicOutfits
+        .withFilter(bt => tempRange.contains(calculateTotalWarmth(bt)))
+        .map(bt =>
+          bt.copy(
+            top = bt.top.copy(itemMetadata = None),
+            bottom = bt.bottom.copy(itemMetadata = None),
+            shoes = bt.shoes.copy(itemMetadata = None)
+          )
         )
-      )
     }.fork
 
     val filteredDressFiber = ZIO.attempt {
-      dressOutfits.withFilter(dt => tempRange.contains(calculateTotalWarmth(dt))).map(dt =>
-        dt.copy(
-          dress = dt.dress.copy(itemMetadata = None),
-          shoes = dt.shoes.copy(itemMetadata = None)
+      dressOutfits
+        .withFilter(dt => tempRange.contains(calculateTotalWarmth(dt)))
+        .map(dt =>
+          dt.copy(
+            dress = dt.dress.copy(itemMetadata = None),
+            shoes = dt.shoes.copy(itemMetadata = None)
+          )
         )
-      )
     }.fork
 
     val filteredLayeredFiber = ZIO.attempt {
-      layeredOutfits.withFilter(lt => tempRange.contains(calculateTotalWarmth(lt))).map(lt =>
-        lt.copy(
-          top = lt.top.copy(itemMetadata = None),
-          bottom = lt.bottom.copy(itemMetadata = None),
-          shoes = lt.shoes.copy(itemMetadata = None),
-          outerwear = lt.outerwear.copy(itemMetadata = None)
+      layeredOutfits
+        .withFilter(lt => tempRange.contains(calculateTotalWarmth(lt)))
+        .map(lt =>
+          lt.copy(
+            top = lt.top.copy(itemMetadata = None),
+            bottom = lt.bottom.copy(itemMetadata = None),
+            shoes = lt.shoes.copy(itemMetadata = None),
+            outerwear = lt.outerwear.copy(itemMetadata = None)
+          )
         )
-      )
     }.fork
 
     for {
@@ -263,32 +275,34 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
       weatherInfoOpt: WeatherInfoResponse
   ): Inclusive = {
     math.round(weatherInfoOpt.current.temp_f) match {
-        case temp if 80 <= temp              => 5 to 15
-        case temp if 70 <= temp && temp < 80 => 10 to 15
-        case temp if 60 <= temp && temp < 70 => 15 to 20
-        case _                               => 25 to 30
+      case temp if 80 <= temp              => 5 to 15
+      case temp if 70 <= temp && temp < 80 => 10 to 15
+      case temp if 60 <= temp && temp < 70 => 15 to 20
+      case _                               => 25 to 30
     }
   }
 
-  private def getCurrentSeasonWarmth(seasonOpt: Option[String] = None): Inclusive = {
+  private def getCurrentSeasonWarmth(
+      seasonOpt: Option[String] = None
+  ): Inclusive = {
     val season = seasonOpt.getOrElse {
       import java.time.LocalDate
       val currentMonth = LocalDate.now().getMonthValue
-      
+
       currentMonth match {
-        case 12 | 1 | 2   => "Winter"
-        case 3 | 4 | 5    => "Spring"
-        case 6 | 7 | 8    => "Summer"
-        case 9 | 10 | 11  => "Fall"
+        case 12 | 1 | 2  => "Winter"
+        case 3 | 4 | 5   => "Spring"
+        case 6 | 7 | 8   => "Summer"
+        case 9 | 10 | 11 => "Fall"
       }
     }
-    
+
     season match {
-      case "Summer" => 5 to 15   // Hottest season - lightest clothing
-      case "Spring" => 10 to 20  // Mild season - moderate clothing
-      case "Fall"   => 15 to 25  // Cool season - warmer clothing
-      case "Winter" => 22 to 30  // Coldest season - warmest clothing
-      case _        => 15 to 25  // Default fallback for unknown seasons
+      case "Summer" => 5 to 15 // Hottest season - lightest clothing
+      case "Spring" => 10 to 20 // Mild season - moderate clothing
+      case "Fall"   => 15 to 25 // Cool season - warmer clothing
+      case "Winter" => 22 to 30 // Coldest season - warmest clothing
+      case _        => 15 to 25 // Default fallback for unknown seasons
     }
   }
 
@@ -313,7 +327,8 @@ class RecommendOutfitSvcFlow(cfgCtx: CfgCtx) {
 
   private def findItemWarmth(
       item: ClosetItemModel
-  ): Int = item.itemMetadata.map(_.warmth.replace(",", "").trim.toInt).getOrElse(0)
+  ): Int =
+    item.itemMetadata.map(_.warmth.replace(",", "").trim.toInt).getOrElse(0)
 
 }
 

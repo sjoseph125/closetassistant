@@ -4,10 +4,7 @@ services:
     build: .
     ports:
       - "8080:8080"
-    environment:
-      - AWS_REGION=us-east-1
-      - AWS_ACCESS_KEY_ID=AKIAUGO4K5EIU2HK75WO
-      - AWS_SECRET_ACCESS_KEY=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
+
     # Or use AWS credentials file instead:
     # volumes:
     #   - ~/.aws:/root/.aws:ro
